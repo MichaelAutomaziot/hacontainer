@@ -1,0 +1,199 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+/* Prevent giant SVG icons during the brief window before MUI styles apply.
+   In a hydration / FOUC state, `<svg>` from @mui/icons-material can render
+   at its native viewBox size, sometimes filling the viewport. Cap them. */
+svg:not(:root) {
+  max-width: 64px;
+  max-height: 64px;
+}
+.MuiSvgIcon-root {
+  width: 1em !important;
+  height: 1em !important;
+  max-width: 1em !important;
+  max-height: 1em !important;
+}
+/* Recharts builds its own SVGs that legitimately fill their container. */
+.recharts-wrapper svg,
+.recharts-surface,
+.recharts-surface svg {
+  max-width: none;
+  max-height: none;
+}
+
+/* Lock the side drawer to the right edge in this RTL app. Bypasses any
+   stylis-plugin-rtl flips of `right`/`left` on the inline anchor styles. */
+.MuiDrawer-docked .MuiDrawer-paper,
+.MuiDrawer-modal .MuiDrawer-paper {
+  right: 0 !important;
+  left: auto !important;
+}
+
+html {
+  min-height: 100%;
+  background: #f3f0ee;
+  scroll-behavior: smooth;
+}
+
+body {
+  min-height: 100%;
+  direction: rtl;
+  text-align: right;
+  color: #1b2422;
+  background:
+    linear-gradient(90deg, rgba(193, 32, 38, 0.045) 1px, transparent 1px),
+    linear-gradient(180deg, rgba(36, 33, 33, 0.032) 1px, transparent 1px),
+    linear-gradient(135deg, #fbfaf8 0%, #f3f0ee 46%, #f7eceb 100%);
+  background-size: 30px 30px, 30px 30px, 100% 100%;
+  font-family: Assistant, Rubik, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-feature-settings: "kern";
+  -webkit-font-smoothing: antialiased;
+  text-rendering: geometricPrecision;
+}
+
+::selection {
+  background: rgba(193, 32, 38, 0.22);
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+input,
+textarea,
+select {
+  direction: rtl;
+  text-align: right;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+.ltr-input {
+  direction: ltr;
+  text-align: left;
+}
+
+.ltr-content {
+  direction: ltr;
+  text-align: left;
+  display: inline-block;
+  unicode-bidi: isolate;
+}
+
+.recharts-wrapper,
+.recharts-surface {
+  direction: ltr;
+}
+
+.workbench-page {
+  isolation: isolate;
+}
+
+.workbench-header {
+  animation: workbench-rise 320ms ease both;
+}
+
+.workbench-filter .MuiStack-root {
+  width: 100%;
+}
+
+.workbench-filter .MuiFormControl-root {
+  min-width: 0;
+}
+
+.workbench-data-panel .MuiDataGrid-root {
+  min-height: 320px;
+}
+
+.MuiDataGrid-root {
+  direction: rtl;
+}
+
+.MuiDataGrid-cell,
+.MuiDataGrid-columnHeaderTitle {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.MuiDataGrid-cellContent {
+  min-width: 0;
+}
+
+.MuiDataGrid-overlayWrapperInner {
+  min-height: 220px;
+}
+
+.MuiButton-startIcon,
+.MuiButton-endIcon,
+.MuiChip-icon {
+  display: inline-flex;
+}
+
+.MuiTooltip-tooltip {
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.MuiDialogContent-root {
+  background:
+    linear-gradient(90deg, rgba(193, 32, 38, 0.028) 1px, transparent 1px),
+    linear-gradient(180deg, rgba(27, 36, 34, 0.025) 1px, transparent 1px),
+    #fbfcf8;
+  background-size: 24px 24px, 24px 24px, 100% 100%;
+}
+
+@keyframes workbench-rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (max-width: 720px) {
+  body {
+    background-size: 24px 24px, 24px 24px, 100% 100%;
+  }
+
+  .workbench-page {
+    padding-inline: 12px;
+  }
+
+  .MuiDataGrid-root {
+    font-size: 0.82rem;
+  }
+
+  .MuiButton-root {
+    white-space: normal;
+  }
+}
+
+@media print {
+  body {
+    background: #fff;
+  }
+
+  .MuiDrawer-root,
+  .MuiAppBar-root,
+  .MuiButton-root,
+  .MuiIconButton-root {
+    display: none !important;
+  }
+
+  .MuiPaper-root {
+    box-shadow: none !important;
+  }
+}
