@@ -15,10 +15,8 @@ RUN apk add --no-cache libc6-compat \
  && corepack enable \
  && corepack prepare pnpm@${PNPM_VERSION} --activate
 WORKDIR /app
-COPY package.json pnpm-lock.yaml* ./
-RUN pnpm fetch --prod=false
-COPY package.json pnpm-lock.yaml* ./
-RUN pnpm install --offline --frozen-lockfile
+COPY package.json pnpm-lock.yaml* .npmrc* ./
+RUN pnpm install --frozen-lockfile
 
 # ── build stage: compile + run standalone prep ───────────────────────────────
 FROM node:${NODE_VERSION}-alpine AS builder
