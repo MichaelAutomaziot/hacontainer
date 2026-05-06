@@ -27,9 +27,8 @@ import { randomUUID } from "node:crypto";
 import {
   buildPM01Csv,
   fetchBrandIndex,
-  fetchHierarchies,
   resolveBrandCode,
-  resolveHierarchyCode,
+  resolveCategoryFromContainerLabel,
   type PM01Row,
 } from "@/lib/shared";
 import { getServiceClient } from "@/utils/supabase/admin";
@@ -41,10 +40,9 @@ export const maxDuration = 300;
 const PAGE = 500;
 const MAX_RETRY_AFTER_MS = 60_000;
 
-// Top-level "Home" hierarchy — used when category mapping fails completely.
-// Better to over-classify with a wide bucket than to fail the import line;
-// SP merchandiser can reclassify before approval.
-const FALLBACK_HIERARCHY = "10000000mp";
+// No silent fallback. Rows whose category cannot be resolved via
+// container_category_mappings are pushed to unresolvable_categories[] and
+// excluded from the PM01 batch — never re-classified to a default bucket.
 
 interface InvRow {
   id: number;
@@ -54,12 +52,13 @@ interface InvRow {
   sku: string | null;
   brand: string | null;
   category: string | null;
+  category_id: string | null;
   images: string[] | null;
   technical_specs: Record<string, unknown> | null;
 }
 
 const INV_COLS =
-  "id, name_he, description_he, ean, sku, brand, category, images, technical_specs";
+  "id, name_he, description_he, ean, sku, brand, category, category_id, images, technical_specs";
 
 /** GS1 mod-10 check digit for an EAN-13 body (12 digits). */
 const gs1Check = (body12: string): number => {
@@ -318,19 +317,17 @@ export async function POST(req: Request) {
     );
   }
 
-  // 3. Resolve brand and category against SP value lists.
+  // 3. Resolve brand against SP value lists. Categories come from the local
+  //    container_category_mappings table (populated by hand + backfilled into
+  //    inventory.category_id) — no per-request Mirakl /api/hierarchies call.
   const base = process.env.MIRAKL_BASE_URL ?? "https://superpharm-prod.mirakl.net";
   const key = process.env.MIRAKL_API_KEY ?? "";
   if (!key) {
     return NextResponse.json({ ok: false, error: "MIRAKL_API_KEY not set" }, { status: 500 });
   }
   let brandIdx: Map<string, string>;
-  let hierarchies: Awaited<ReturnType<typeof fetchHierarchies>>;
   try {
-    [brandIdx, hierarchies] = await Promise.all([
-      fetchBrandIndex(base, key),
-      fetchHierarchies(base, key),
-    ]);
+    brandIdx = await fetchBrandIndex(base, key);
   } catch (e) {
     return NextResponse.json(
       { ok: false, error: `Mirakl metadata fetch: ${(e as Error).message}` },
@@ -338,15 +335,62 @@ export async function POST(req: Request) {
     );
   }
 
+  // Batch-resolve sp_category_code for every inv.category_id we already have.
+  const catIds = Array.from(
+    new Set(candidates.map((r) => r.category_id).filter((v): v is string => !!v))
+  );
+  const catIdToSpCode = new Map<string, string>();
+  if (catIds.length > 0) {
+    const { data: catRows, error: catErr } = await sb
+      .from("categories")
+      .select("id, sp_category_code, is_leaf")
+      .in("id", catIds);
+    if (catErr) {
+      return NextResponse.json(
+        { ok: false, error: `categories lookup: ${catErr.message}` },
+        { status: 500 }
+      );
+    }
+    for (const c of (catRows ?? []) as { id: string; sp_category_code: string | null; is_leaf: boolean | null }[]) {
+      // Only accept leaves — non-leaf codes are rejected by Mirakl's catalog
+      // validator and would silently land in the merchandiser queue forever.
+      if (c.sp_category_code && c.is_leaf) catIdToSpCode.set(c.id, c.sp_category_code);
+    }
+  }
+
   const accepted: { invId: number; sku: string; row: PM01Row }[] = [];
   const unresolvableBrand: { sku: string; inv_id: number; brand: string }[] = [];
+  const unresolvableCategory: {
+    sku: string;
+    inv_id: number;
+    category: string | null;
+    category_id: string | null;
+  }[] = [];
   for (const inv of candidates) {
     const brandCode = resolveBrandCode(inv.brand, brandIdx);
     if (!brandCode) {
       unresolvableBrand.push({ sku: inv.sku ?? `inv:${inv.id}`, inv_id: inv.id, brand: inv.brand ?? "" });
       continue;
     }
-    const categoryCode = resolveHierarchyCode(inv.category, hierarchies, FALLBACK_HIERARCHY);
+    // Prefer the resolved category_id from inventory (populated by the
+    // backfill RPC). Fall back to a live lookup against container_category_
+    // mappings for rows that haven't been backfilled yet (e.g. freshly
+    // ingested rows).
+    let categoryCode: string | null =
+      inv.category_id ? catIdToSpCode.get(inv.category_id) ?? null : null;
+    if (!categoryCode) {
+      const resolved = await resolveCategoryFromContainerLabel(sb, inv.category);
+      categoryCode = resolved?.sp_category_code ?? null;
+    }
+    if (!categoryCode) {
+      unresolvableCategory.push({
+        sku: inv.sku ?? `inv:${inv.id}`,
+        inv_id: inv.id,
+        category: inv.category,
+        category_id: inv.category_id,
+      });
+      continue;
+    }
     const sku = `inv:${inv.id}`;
     accepted.push({
       invId: inv.id,
@@ -371,8 +415,10 @@ export async function POST(req: Request) {
       already_cataloged: alreadyCataloged,
       blocked_by_data: rejected.length,
       blocked_by_brand: unresolvableBrand.length,
+      blocked_by_category: unresolvableCategory.length,
       rejected,
       unresolvable_brands: unresolvableBrand,
+      unresolvable_categories: unresolvableCategory,
       elapsed_s: Number(((Date.now() - t0) / 1000).toFixed(2)),
     });
   }
@@ -381,12 +427,14 @@ export async function POST(req: Request) {
     return NextResponse.json(
       {
         ok: false,
-        error: "all rows rejected pre-flight (data quality / brand)",
+        error: "all rows rejected pre-flight (data quality / brand / category)",
         already_cataloged: alreadyCataloged,
         blocked_by_data: rejected.length,
         blocked_by_brand: unresolvableBrand.length,
+        blocked_by_category: unresolvableCategory.length,
         rejected,
         unresolvable_brands: unresolvableBrand,
+        unresolvable_categories: unresolvableCategory,
       },
       { status: 422 }
     );
@@ -421,8 +469,10 @@ export async function POST(req: Request) {
         rejected_count: rejected.length,
         already_cataloged: alreadyCataloged,
         blocked_by_brand: unresolvableBrand.length,
+        blocked_by_category: unresolvableCategory.length,
         rejected,
         unresolvable_brands: unresolvableBrand,
+        unresolvable_categories: unresolvableCategory,
         skus: accepted.map((a) => a.sku),
         inv_ids: accepted.map((a) => a.invId),
       },
@@ -467,8 +517,10 @@ export async function POST(req: Request) {
     already_cataloged: alreadyCataloged,
     blocked_by_data: rejected.length,
     blocked_by_brand: unresolvableBrand.length,
+    blocked_by_category: unresolvableCategory.length,
     rejected,
     unresolvable_brands: unresolvableBrand,
+    unresolvable_categories: unresolvableCategory,
     note: "PM01 submitted; status will resolve via POST /api/sync/superpharm/check, which auto-triggers OF01 on success",
     elapsed_s: elapsed,
   });
