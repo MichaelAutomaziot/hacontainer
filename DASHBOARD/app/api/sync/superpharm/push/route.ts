@@ -420,14 +420,21 @@ export async function POST(req: Request) {
   // button when all selected rows still need catalog creation. (Without this
   // the OF01-eligible count is 0 for any first-time push, and the button
   // disables despite there being work to do.)
+  //
+  // Dry mode skips the live Mirakl call (`fetchSpCatalogedEans` — ~94 round-
+  // trips for 4,679 EANs) and uses only the cheap DB sources. The count is
+  // therefore slightly conservative (rows that exist in the SP catalog but
+  // whose DB state hasn't caught up are counted as "needs PM01"); the real
+  // (non-dry) push re-checks against Mirakl and skips them. This keeps the
+  // dry-run sub-second so the upload UI stays responsive.
   const needsPm01: InvRow[] = [];
   if (importType === "official" && invRows.length > 0) {
-    const eansToCheck = invRows
-      .map((r) => r.ean?.trim())
-      .filter((e): e is string => !!e);
-
-    // Source 1: live API check.
-    const cataloged = await fetchSpCatalogedEans(eansToCheck);
+    // Source 1: live API check (skipped in dry mode for latency reasons).
+    const cataloged: Set<string> = dry
+      ? new Set<string>()
+      : await fetchSpCatalogedEans(
+          invRows.map((r) => r.ean?.trim()).filter((e): e is string => !!e)
+        );
 
     // Source 3: completed PM01 sync_jobs touching any of these inv_ids.
     const knownPm01Synced = new Set<number>();
