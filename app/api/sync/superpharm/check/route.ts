@@ -384,7 +384,12 @@ const reconcilePM01 = async (
       const res = await fetch(`${baseUrl}/api/sync/superpharm/push`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mode: "by_ids", ids: successInvIds, importType: "official" }),
+        body: JSON.stringify({
+          mode: "by_ids",
+          ids: successInvIds,
+          importType: "official",
+          chained: true,
+        }),
       });
       if (res.ok) {
         const json = (await res.json()) as { sync_job_id?: string };

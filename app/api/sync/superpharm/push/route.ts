@@ -139,6 +139,9 @@ interface RequestBody {
   statusFilter?: string;
   importType?: ImportType;
   ids?: number[];
+  /** Set ONLY by /check when chaining PM01-success → OF01. Suppresses
+   *  PM01 re-dispatch so we don't loop. User-initiated calls leave this off. */
+  chained?: boolean;
 }
 
 const pickInventory = async (
@@ -282,6 +285,7 @@ export async function POST(req: Request) {
     body.mode ?? (body.ids?.length ? "by_ids" : "by_status");
   const importType: ImportType = body.importType ?? "official";
   const dry = body.dry === true;
+  const chained = body.chained === true;
 
   // 1. Pick candidates per mode.
   let invRows: InvRow[];
@@ -355,12 +359,11 @@ export async function POST(req: Request) {
   // Fire-and-forget PM01 dispatch via the dedicated endpoint. We don't await
   // its full processing here — Mirakl PM01 takes minutes to integrate. The
   // /check route picks them up and chains to OF01 on success. Skip the
-  // dispatch when this very push is a chained call (mode=by_ids carrying the
-  // post-PM01 catalog_synced ids), to avoid a loop.
+  // dispatch only when this is a chained call from /check, to avoid a loop.
   let pm01DispatchedJobId: string | null = null;
   let pm01DispatchedCount = 0;
   let pm01DispatchError: string | null = null;
-  if (!dry && needsPm01.length > 0 && mode !== "by_ids") {
+  if (!dry && needsPm01.length > 0 && !chained) {
     try {
       const reqUrl = new URL(req.url);
       const baseUrl = `${reqUrl.protocol}//${reqUrl.host}`;
@@ -380,12 +383,11 @@ export async function POST(req: Request) {
       pm01DispatchError = (e as Error).message;
     }
   }
-  // If /push was actually a chained call from /check (mode=by_ids), surface
-  // any still-missing-from-catalog ids as a hard rejection — this should not
-  // happen after PM01 success, but we keep the bucket so a regression is
-  // visible rather than silent.
+  // Surface still-missing-from-catalog ids as a hard rejection ONLY on a
+  // chained call (PM01-then-OF01 path). On user-initiated calls we already
+  // dispatched PM01 above; nothing more to surface as failure here.
   const blockedByCatalog: { sku: string; inv_id: number; errors: string[] }[] =
-    needsPm01.length > 0 && mode === "by_ids"
+    needsPm01.length > 0 && chained
       ? needsPm01.map((r) => ({
           sku: r.sku ?? `inv:${r.id}`,
           inv_id: r.id,

@@ -144,15 +144,21 @@ export default function PilotPage() {
                     sku_count?: number;
                     rejected?: { sku: string; errors: string[] }[];
                     error?: string;
+                    pm01_dispatched_count?: number;
+                    pm01_sync_job_id?: string | null;
                   };
                   if (!res.ok || !json.ok) {
                     open?.({ type: "error", message: `שגיאה בשליחה: ${json.error ?? res.statusText}` });
                   } else {
+                    const ofCount = json.sku_count ?? 0;
+                    const pmCount = json.pm01_dispatched_count ?? 0;
                     const rej = json.rejected?.length ?? 0;
-                    open?.({
-                      type: "success",
-                      message: `נשלחו ${json.sku_count ?? 0} מוצרים. import_id=${json.import_id}${rej ? ` · ${rej} נדחו` : ""}`,
-                    });
+                    const parts: string[] = [];
+                    if (ofCount > 0) parts.push(`${ofCount} הצעות (OF01) נשלחו · import_id=${json.import_id}`);
+                    if (pmCount > 0) parts.push(`${pmCount} מוצרים חדשים נשלחו ליצירה בקטלוג SP (PM01)`);
+                    if (rej) parts.push(`${rej} נדחו`);
+                    if (parts.length === 0) parts.push("אין מוצרים זמינים לשליחה");
+                    open?.({ type: "success", message: parts.join(" · ") });
                     refetch();
                   }
                 } catch (e) {
