@@ -1,0 +1,38 @@
+{
+  "mcpServers": {
+    "supabase": {
+      "type": "http",
+      "url": "${SUPABASE_MCP_URL}",
+      "headers": {
+        "Authorization": "Bearer ${SUPABASE_MCP_TOKEN}"
+      }
+    },
+    "client-supabase": {
+      "type": "http",
+      "url": "${CLIENT_SUPABASE_MCP_URL}",
+      "headers": {
+        "Authorization": "Bearer ${CLIENT_SUPABASE_MCP_TOKEN}"
+      }
+    },
+    "n8n-kb": {
+      "command": "node",
+      "args": [
+        "${N8N_KB_SERVER_PATH}"
+      ],
+      "env": {
+        "SUPABASE_URL": "${SUPABASE_URL}",
+        "SUPABASE_KEY": "${SUPABASE_SERVICE_KEY}"
+      }
+    },
+    "railway": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@railway/mcp-server"
+      ],
+      "env": {
+        "RAILWAY_API_TOKEN": "${RAILWAY_API_TOKEN}"
+      }
+    }
+  }
+}
