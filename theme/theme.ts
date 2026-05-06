@@ -227,13 +227,15 @@ export const theme = createTheme(
           root: {
             borderRadius: 8,
             border: `1px solid ${border}`,
-            backgroundImage: `linear-gradient(180deg, ${alpha(paperStrong, 0.92)}, ${alpha(paper, 0.98)})`,
-            boxShadow: '0 12px 34px rgba(27, 36, 34, 0.07)',
+            backgroundImage: 'none',
+            backgroundColor: paper,
+            boxShadow: '0 1px 2px rgba(27, 36, 34, 0.04), 0 6px 18px rgba(27, 36, 34, 0.04)',
           },
           outlined: {
-            borderColor: alpha(ink, 0.11),
+            borderColor: alpha(ink, 0.1),
             boxShadow: 'none',
-            backgroundImage: `linear-gradient(180deg, ${alpha(paperStrong, 0.74)}, ${alpha(paper, 0.9)})`,
+            backgroundImage: 'none',
+            backgroundColor: paper,
           },
         },
       },
@@ -243,8 +245,9 @@ export const theme = createTheme(
           root: {
             borderRadius: 8,
             border: `1px solid ${border}`,
-            backgroundImage: `linear-gradient(180deg, ${alpha(paperStrong, 0.92)}, ${alpha(paper, 0.98)})`,
-            boxShadow: '0 14px 38px rgba(27, 36, 34, 0.075)',
+            backgroundImage: 'none',
+            backgroundColor: paper,
+            boxShadow: '0 1px 2px rgba(27, 36, 34, 0.04), 0 8px 22px rgba(27, 36, 34, 0.05)',
             overflow: 'hidden',
           },
         },
@@ -603,11 +606,11 @@ export const theme = createTheme(
       MuiAppBar: {
         styleOverrides: {
           root: {
-            backgroundColor: alpha(paper, 0.86),
+            backgroundColor: paper,
+            backgroundImage: 'none',
             color: ink,
             boxShadow: 'none',
             borderBottom: `1px solid ${alpha(ink, 0.09)}`,
-            backdropFilter: 'blur(18px)',
           },
         },
       },

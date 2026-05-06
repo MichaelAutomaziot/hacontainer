@@ -1,0 +1,44 @@
+# Build artifacts and caches
+node_modules
+.next
+.turbo
+.cache
+dist
+build
+out
+
+# Source control
+.git
+.gitignore
+
+# Editor / IDE
+.vscode
+.idea
+.claude
+
+# Local env (Railway provides envs at runtime)
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Tests, scratch
+coverage
+scraped
+tmp
+*.tsbuildinfo
+
+# Supabase local
+supabase/.temp

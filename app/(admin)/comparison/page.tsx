@@ -1,13 +1,5 @@
-"use client";
-
-import { Suspense } from "react";
-import { RouteLoading } from "@/components/shared/RouteLoading";
-import PageClient from "./PageClient";
+import { LegacyRedirect } from "@/components/shared";
 
 export default function Page() {
-  return (
-    <Suspense fallback={<RouteLoading />}>
-      <PageClient />
-    </Suspense>
-  );
+  return <LegacyRedirect to="/board/catalog?tab=comparison" />;
 }
