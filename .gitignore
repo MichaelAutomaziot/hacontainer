@@ -1,7 +1,10 @@
+# Repo root — project lives under DASHBOARD/. Anything here is local-only.
+.claude/
+.next/
+node_modules/
+tmp/
+.cache/
+*.log
 .env
-  .env.local
-  .env.production
-  .claude/settings.local.json                                                                                                                                                                                                                                                                                                                   
-  .claude/worktrees/                                                                                                                                                                                                                                                                                                                            
-  .DS_Store                                                                                                                                                                                                                                                                                                                                       Thumbs.db                                                                                                                                                                                                                                                                                                                                     
-  node_modules/
+.env.local
+.env.*.local

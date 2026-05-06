@@ -21,8 +21,11 @@ RUN pnpm install --frozen-lockfile
 # ── build stage: compile + run standalone prep ───────────────────────────────
 FROM node:${NODE_VERSION}-alpine AS builder
 ARG PNPM_VERSION
-ARG NEXT_PUBLIC_SUPABASE_URL
-ARG NEXT_PUBLIC_SUPABASE_ANON_KEY
+# Placeholders so `next build` succeeds without real Supabase creds. The
+# runtime starter (scripts/start-standalone.mjs) replaces these tokens with
+# real values from the Railway service environment on container start.
+ARG NEXT_PUBLIC_SUPABASE_URL=https://runtime-supabase-url.invalid
+ARG NEXT_PUBLIC_SUPABASE_ANON_KEY=runtime-supabase-anon-key
 RUN corepack enable && corepack prepare pnpm@${PNPM_VERSION} --activate
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules

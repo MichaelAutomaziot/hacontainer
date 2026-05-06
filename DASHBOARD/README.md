@@ -1,42 +1,7 @@
-# HaContainer Dashboard
-
-Single Next.js production dashboard for HaContainer Super-Pharm operations.
-
-## Run Locally
-
-```bash
-pnpm install
-pnpm dev
-```
-
-Open `http://localhost:3000`.
-
-## Production
-
-```bash
-pnpm install --frozen-lockfile
-pnpm build
-pnpm start
-```
-
-The app builds with Next.js standalone output enabled. `pnpm start` runs
-`.next/standalone/server.js`; for deployment, set the same environment
-variables from `.env.example` in the hosting provider.
-
-## Structure
-
-```text
-app/          Next.js App Router pages and API routes
-components/   Dashboard UI components
-lib/shared/   Pricing and Super-Pharm OF01 helpers used by API routes
-providers/    Refine, auth, access-control, data, and theme providers
-supabase/     Database migrations
-utils/        Supabase and formatting utilities
-```
-
-## Checks
-
-```bash
-pnpm typecheck
-pnpm build
-```
+# Ran Faina - Product Sync Pilot                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             Build a cloud-hosted central product dashboard and automation that compares The Container catalog against Super-Pharm, identifies missing products, applies the client's pricing/shipping/promo rules, and publishes the approved products through Mirakl while preparing the system for future multi-channel expansion.                                                                                                                                                                                                                                                                                                                         
+  ## Quick Start                                                                                                                                                                                                                                                                                                                                   
+  ```bash                                                                                                                                                                                                                                                                                                                                    
+  git clone https://github.com/automaziot-ai/project-ran-faina.git
+  cd project-ran-faina                                                                                                                                                                                                                                                                                                                                  claude
+  ```                                                                                                                                                                                                                                                                                                                                        
+                                                                                                                                                                                                                                                                                                                                                  Claude Code will read CLAUDE.md automatically. Run `/automaziot-project-setup` to deploy Railway infrastructure.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              ## Zonda                                                                                                                                                                                                                                                                                                                                        https://zonda.automaziot.ai/projects/d1ff9c3c-5030-4167-a54f-646185cc91de
