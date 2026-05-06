@@ -405,6 +405,10 @@ export async function POST(req: Request) {
     // valid "deferred" outcome (pilot button click → catalog sync started,
     // OF01 will fire later via /check). Otherwise it's a true error.
     const hasDeferredPm01 = pm01DispatchedJobId !== null && pm01DispatchedCount > 0;
+    const explainNoMatch =
+      needsPm01.length > 0 && !hasDeferredPm01
+        ? `${needsPm01.length} EAN(s) need PM01 (product create) first but PM01 dispatch did not produce a job${pm01DispatchError ? `: ${pm01DispatchError}` : ` (probable cause: missing required PM01 data — name, EAN, brand, or image — on all selected rows; check pm01_dispatch_error / unresolvable_brands)`}`
+        : "no inventory rows match selection (after catalog gate)";
     return NextResponse.json(
       {
         ok: dry || hasDeferredPm01,
@@ -413,6 +417,7 @@ export async function POST(req: Request) {
         blocked_by_catalog: blockedByCatalog.length,
         blocked_by_priceFor: 0,
         rejected: blockedByCatalog,
+        needs_pm01_count: needsPm01.length,
         pm01_dispatched_count: pm01DispatchedCount,
         pm01_sync_job_id: pm01DispatchedJobId,
         pm01_dispatch_error: pm01DispatchError,
@@ -422,7 +427,7 @@ export async function POST(req: Request) {
                 note: `${pm01DispatchedCount} products sent to SP catalog (PM01). OF01 will auto-trigger on next /check call after Mirakl finishes integrating them.`,
               }
             : {}
-          : { error: "no inventory rows match selection (after catalog gate)" }),
+          : { error: explainNoMatch }),
       },
       { status: dry || hasDeferredPm01 ? 200 : 400 }
     );
