@@ -32,6 +32,7 @@ export default function PilotPage() {
   const [statusFilter, setStatusFilter] = useState<string>("approved_for_pilot");
   const [pushBusy, setPushBusy] = useState<boolean>(false);
   const [pm01Busy, setPm01Busy] = useState<boolean>(false);
+  const [checkBusy, setCheckBusy] = useState<boolean>(false);
   const [transformBusyId, setTransformBusyId] = useState<number | null>(null);
   const { data, isFetching, refetch } = useList<Inv>({
     resource: "inventory",
@@ -119,6 +120,49 @@ export default function PilotPage() {
                 variant={statusFilter === s ? "filled" : "outlined"} />
         ))}
         <Box sx={{ flex: 1 }} />
+        <Tooltip title={checkBusy ? "בודק סטטוס Mirakl…" : "סנכרן סטטוס מ-Mirakl: סוגר PM01/OF01 שהושלמו, מקדם מוצרים שעלו לקטלוג, מפעיל OF01 על מה שמוכן"}>
+          <span>
+            <Button
+              startIcon={<RefreshIcon />}
+              variant="text"
+              color="inherit"
+              sx={{ mr: 1 }}
+              disabled={checkBusy}
+              onClick={async () => {
+                if (checkBusy) return;
+                setCheckBusy(true);
+                try {
+                  const res = await fetch("/api/sync/superpharm/check", { method: "POST" });
+                  const json = (await res.json().catch(() => ({}))) as {
+                    ok?: boolean;
+                    checked?: number;
+                    summary?: { mirakl_status: string; sync_status: string; promoted_inv: number; rolled_back_inv: number; chained_of01_job_id?: string }[];
+                    error?: string;
+                  };
+                  if (!res.ok || !json.ok) {
+                    open?.({ type: "error", message: `בדיקה נכשלה: ${json.error ?? res.statusText}` });
+                  } else {
+                    const promoted = (json.summary ?? []).reduce((a, s) => a + (s.promoted_inv ?? 0), 0);
+                    const rolled = (json.summary ?? []).reduce((a, s) => a + (s.rolled_back_inv ?? 0), 0);
+                    const chained = (json.summary ?? []).filter((s) => s.chained_of01_job_id).length;
+                    const parts = [`נבדקו ${json.checked ?? 0} jobs`];
+                    if (promoted) parts.push(`${promoted} קודמו`);
+                    if (rolled) parts.push(`${rolled} הוחזרו`);
+                    if (chained) parts.push(`${chained} OF01 הופעלו אוטומטית`);
+                    open?.({ type: "success", message: parts.join(" · ") });
+                    refetch();
+                  }
+                } catch (e) {
+                  open?.({ type: "error", message: `שגיאת רשת: ${(e as Error).message}` });
+                } finally {
+                  setCheckBusy(false);
+                }
+              }}
+            >
+              {checkBusy ? "בודק…" : "בדוק סטטוס Mirakl"}
+            </Button>
+          </span>
+        </Tooltip>
         <Tooltip title={pm01Busy ? "שולח PM01 לסופר-פארם…" : "צור מוצרים חדשים בקטלוג SP (PM01) — שלב חובה לפני העלאת הצעה (OF01)"}>
           <span>
             <Button

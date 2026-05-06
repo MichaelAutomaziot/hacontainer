@@ -354,27 +354,51 @@ export async function POST(req: Request) {
     invRows = survivors;
   }
 
-  // 3b. Catalog gate: official imports require the EAN to already exist in SP's
-  // product catalog. Otherwise Mirakl rejects with "state of the product is
-  // unknown". Carve those rows off and auto-dispatch a PM01 (product create)
-  // for them; /check will chain back to OF01 once the products are cataloged.
+  // 3b. Catalog gate: official imports require the EAN to already exist in
+  // SP's catalog. SP's /api/products lookup is NOT reliable post-PM01 (there
+  // is a propagation delay of indeterminate length even after PM01 reports
+  // products_successfully_synchronized > 0). So we trust two signals:
+  //   1. /api/products returns the product → cataloged.
+  //   2. inventory.pilot_status === 'catalog_synced' (set by /check after a
+  //      successful PM01 import) → cataloged, regardless of #1.
+  //   3. There is a sync_jobs row of type='superpharm_pm01' with
+  //      status='completed' carrying this inv_id.
+  // Anything not covered by 1/2/3 falls into needsPm01 and triggers a fresh
+  // PM01 dispatch.
   //
-  // Skip the gate on dry-run calls — the pilot page uses dry=true to validate
-  // single-row "ready to transform" status, which conceptually only depends
-  // on data quality (name, price, EAN, images), not catalog membership. We
-  // still flag needsPm01 separately so the response can surface it.
+  // Skip the gate on dry-run calls (transform readiness check).
   const needsPm01: InvRow[] = [];
   if (importType === "official" && invRows.length > 0 && !dry) {
     const eansToCheck = invRows
       .map((r) => r.ean?.trim())
       .filter((e): e is string => !!e);
+
+    // Source 1: live API check.
     const cataloged = await fetchSpCatalogedEans(eansToCheck);
+
+    // Source 3: completed PM01 sync_jobs touching any of these inv_ids.
+    const knownPm01Synced = new Set<number>();
+    {
+      const { data: pmJobs } = await sb
+        .from("sync_jobs")
+        .select("payload")
+        .eq("type", "superpharm_pm01")
+        .eq("status", "completed");
+      for (const j of (pmJobs ?? []) as { payload: Record<string, unknown> | null }[]) {
+        const ids = (j.payload?.inv_ids as number[] | undefined) ?? [];
+        for (const id of ids) knownPm01Synced.add(id);
+      }
+    }
+
     const survivors: InvRow[] = [];
     for (const r of invRows) {
-      if (r.ean && !cataloged.has(r.ean.trim())) {
-        needsPm01.push(r);
-      } else {
+      const apiSays = !!(r.ean && cataloged.has(r.ean.trim()));
+      const pilotSays = r.pilot_status === "catalog_synced";
+      const dbSays = knownPm01Synced.has(r.id);
+      if (apiSays || pilotSays || dbSays) {
         survivors.push(r);
+      } else {
+        needsPm01.push(r);
       }
     }
     invRows = survivors;
