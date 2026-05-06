@@ -10,12 +10,19 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function POST() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const url =
+    (process.env.NEXT_PUBLIC_SUPABASE_URL ?? "").trim() ||
+    (process.env.SUPABASE_URL ?? "").trim();
+  const serviceKey =
+    (process.env.SUPABASE_SERVICE_ROLE_KEY ?? "").trim() ||
+    (process.env.SUPABASE_SERVICE_KEY ?? "").trim();
 
   if (!url || !serviceKey) {
+    const missing: string[] = [];
+    if (!url) missing.push("NEXT_PUBLIC_SUPABASE_URL (or SUPABASE_URL)");
+    if (!serviceKey) missing.push("SUPABASE_SERVICE_ROLE_KEY (or SUPABASE_SERVICE_KEY)");
     return NextResponse.json(
-      { ok: false, error: "missing supabase env" },
+      { ok: false, error: `missing env var(s): ${missing.join(", ")}` },
       { status: 500 }
     );
   }
