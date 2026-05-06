@@ -61,6 +61,44 @@ interface InvRow {
 const INV_COLS =
   "id, name_he, description_he, ean, sku, brand, category, images, technical_specs";
 
+/** GS1 mod-10 check digit for an EAN-13 body (12 digits). */
+const gs1Check = (body12: string): number => {
+  let s = 0;
+  for (let i = 0; i < body12.length; i++) {
+    const d = body12.charCodeAt(i) - 48;
+    s += i % 2 === 0 ? d : d * 3;
+  }
+  return (10 - (s % 10)) % 10;
+};
+
+/** Internal-use EAN-13 derived from inventory.id. Prefix 299 lies in
+ *  GS1's reserved 200-299 in-store/internal range. */
+const generateInternalEan = (invId: number): string => {
+  const body12 = `299${String(invId).padStart(9, "0")}`;
+  return body12 + String(gs1Check(body12));
+};
+
+/** Mint EAN for any candidate that lacks one, persist to inventory. */
+const ensureEans = async (
+  sb: ReturnType<typeof getServiceClient>,
+  rows: InvRow[]
+): Promise<number[]> => {
+  const minted: { id: number; ean: string }[] = [];
+  for (const r of rows) {
+    const cur = (r.ean ?? "").trim();
+    if (!cur || cur.length < 8) {
+      const ean = generateInternalEan(r.id);
+      r.ean = ean;
+      minted.push({ id: r.id, ean });
+    }
+  }
+  for (const m of minted) {
+    const { error } = await sb.from("inventory").update({ ean: m.ean }).eq("id", m.id);
+    if (error) console.warn(`[products/push/ensureEans] inv:${m.id} ean update: ${error.message}`);
+  }
+  return minted.map((m) => m.id);
+};
+
 /** Extract numeric-keyed entries from technical_specs and stringify their
  *  values. These flow as PM01 extra-attribute columns keyed by Mirakl
  *  attribute code (e.g. "5589" → screen size). Non-numeric keys (brand,
@@ -221,6 +259,16 @@ export async function POST(req: Request) {
     invRows = await pickInventory(sb, body);
   } catch (e) {
     return NextResponse.json({ ok: false, error: (e as Error).message }, { status: 500 });
+  }
+
+  // 1b. Auto-mint EAN-13 for rows that lack one (persisted unless dry).
+  if (!dry) {
+    await ensureEans(sb, invRows);
+  } else {
+    for (const r of invRows) {
+      const cur = (r.ean ?? "").trim();
+      if (!cur || cur.length < 8) r.ean = generateInternalEan(r.id);
+    }
   }
 
   // Drop rows missing the bare-minimum data PM01 requires.

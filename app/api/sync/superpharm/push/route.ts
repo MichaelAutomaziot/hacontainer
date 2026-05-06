@@ -66,6 +66,50 @@ const INV_COLS =
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+/** GS1 mod-10 check digit for an EAN-13 body (12 digits). */
+const gs1Check = (body12: string): number => {
+  let s = 0;
+  for (let i = 0; i < body12.length; i++) {
+    const d = body12.charCodeAt(i) - 48;
+    s += i % 2 === 0 ? d : d * 3;
+  }
+  return (10 - (s % 10)) % 10;
+};
+
+/** Internal-use EAN-13 derived from inventory.id. Prefix 299 lies in
+ *  GS1's reserved 200-299 in-store/internal range, so it cannot collide
+ *  with any manufacturer-issued EAN. The 9-digit body is the zero-padded
+ *  inventory id, making generation deterministic & collision-free. */
+const generateInternalEan = (invId: number): string => {
+  const body12 = `299${String(invId).padStart(9, "0")}`;
+  return body12 + String(gs1Check(body12));
+};
+
+/** For every InvRow lacking a usable EAN, mint one and flush to the DB so
+ *  subsequent calls see it. Returns the list of rows mutated, for logging. */
+const ensureEans = async (
+  sb: ReturnType<typeof getServiceClient>,
+  rows: InvRow[]
+): Promise<number[]> => {
+  const minted: { id: number; ean: string }[] = [];
+  for (const r of rows) {
+    const cur = (r.ean ?? "").trim();
+    if (!cur || cur.length < 8) {
+      const ean = generateInternalEan(r.id);
+      r.ean = ean;
+      minted.push({ id: r.id, ean });
+    }
+  }
+  if (minted.length === 0) return [];
+  // Bulk-update via per-row PATCH (Postgres .update() is single-row in the
+  // supabase-js v2 builder). For pilot scales (<3k) this is fast enough.
+  for (const m of minted) {
+    const { error } = await sb.from("inventory").update({ ean: m.ean }).eq("id", m.id);
+    if (error) console.warn(`[push/ensureEans] inv:${m.id} ean update: ${error.message}`);
+  }
+  return minted.map((m) => m.id);
+};
+
 /** Resolve an absolute origin for self-fetches (PM01 chain). Tries req.url
  *  (works in production-like envs), then APP_BASE_URL, then the Host header.
  *  Necessary because new URL(req.url) in some Next.js dev setups receives a
@@ -315,6 +359,28 @@ export async function POST(req: Request) {
       { ok: false, error: (e as Error).message },
       { status: 500 }
     );
+  }
+
+  // 1b. Auto-mint internal EAN-13 for any row that lacks one. Mirakl OF01
+  // requires product-id; without an EAN we can't ship offers via the
+  // 'official' import_type. Prefix 299 is GS1's reserved internal range —
+  // safe from real-EAN collisions. On non-dry runs the new EAN is persisted
+  // to inventory so future passes see the same value; on dry runs (the
+  // pilot transform-readiness check) we only inject in-memory.
+  let mintedIds: number[] = [];
+  if (dry) {
+    for (const r of invRows) {
+      const cur = (r.ean ?? "").trim();
+      if (!cur || cur.length < 8) {
+        r.ean = generateInternalEan(r.id);
+        mintedIds.push(r.id);
+      }
+    }
+  } else {
+    mintedIds = await ensureEans(sb, invRows);
+  }
+  if (mintedIds.length > 0) {
+    console.log(`[push] minted internal EANs (${dry ? "dry" : "persisted"}) for ${mintedIds.length} rows: ${mintedIds.slice(0, 10).join(",")}${mintedIds.length > 10 ? "…" : ""}`);
   }
 
   // 2. Pricing rules.
