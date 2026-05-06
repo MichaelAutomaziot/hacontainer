@@ -339,8 +339,13 @@ export async function POST(req: Request) {
   // product catalog. Otherwise Mirakl rejects with "state of the product is
   // unknown". Carve those rows off and auto-dispatch a PM01 (product create)
   // for them; /check will chain back to OF01 once the products are cataloged.
+  //
+  // Skip the gate on dry-run calls — the pilot page uses dry=true to validate
+  // single-row "ready to transform" status, which conceptually only depends
+  // on data quality (name, price, EAN, images), not catalog membership. We
+  // still flag needsPm01 separately so the response can surface it.
   const needsPm01: InvRow[] = [];
-  if (importType === "official" && invRows.length > 0) {
+  if (importType === "official" && invRows.length > 0 && !dry) {
     const eansToCheck = invRows
       .map((r) => r.ean?.trim())
       .filter((e): e is string => !!e);
