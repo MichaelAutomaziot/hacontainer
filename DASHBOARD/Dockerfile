@@ -23,12 +23,16 @@ RUN pnpm install --offline --frozen-lockfile
 # ── build stage: compile + run standalone prep ───────────────────────────────
 FROM node:${NODE_VERSION}-alpine AS builder
 ARG PNPM_VERSION
+ARG NEXT_PUBLIC_SUPABASE_URL
+ARG NEXT_PUBLIC_SUPABASE_ANON_KEY
 RUN corepack enable && corepack prepare pnpm@${PNPM_VERSION} --activate
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
+ENV NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL}
+ENV NEXT_PUBLIC_SUPABASE_ANON_KEY=${NEXT_PUBLIC_SUPABASE_ANON_KEY}
 # `pnpm build` runs `next build && node scripts/prepare-standalone.mjs`,
 # which produces .next/standalone with public/ and .next/static copied in.
 RUN pnpm build

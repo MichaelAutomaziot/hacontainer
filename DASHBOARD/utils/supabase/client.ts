@@ -1,9 +1,7 @@
 "use client";
 
 import { createBrowserClient } from "@supabase/ssr";
-
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://placeholder.supabase.co";
-const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "placeholder-key";
+import { SUPABASE_ANON_KEY, SUPABASE_URL } from "./env";
 
 const cookieAdapter = {
   get(name: string) {
