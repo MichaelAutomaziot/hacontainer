@@ -34,6 +34,7 @@ import {
   type SourceProduct,
   type OF01Row,
 } from "@/lib/shared";
+import { dispatchPm01 } from "@/lib/server/pm01-dispatch";
 import { getServiceClient } from "@/utils/supabase/admin";
 
 export const runtime = "nodejs";
@@ -108,25 +109,6 @@ const ensureEans = async (
     if (error) console.warn(`[push/ensureEans] inv:${m.id} ean update: ${error.message}`);
   }
   return minted.map((m) => m.id);
-};
-
-/** Resolve an absolute origin for self-fetches (PM01 chain). Tries req.url
- *  (works in production-like envs), then APP_BASE_URL, then the Host header.
- *  Necessary because new URL(req.url) in some Next.js dev setups receives a
- *  relative path and throws. */
-const resolveBaseUrl = (req: Request): string => {
-  try {
-    const u = new URL(req.url);
-    if (u.host) return `${u.protocol}//${u.host}`;
-  } catch {
-    /* fall through */
-  }
-  const env = process.env.APP_BASE_URL;
-  if (env && /^https?:\/\//.test(env)) return env.replace(/\/$/, "");
-  const host = req.headers.get("host");
-  const proto = req.headers.get("x-forwarded-proto") ?? "http";
-  if (host) return `${proto}://${host}`;
-  return "http://localhost:3000";
 };
 
 const toSourceProduct = (inv: InvRow): SourceProduct => ({
@@ -470,48 +452,35 @@ export async function POST(req: Request) {
     invRows = survivors;
   }
 
-  // Fire-and-forget PM01 dispatch via the dedicated endpoint. We don't await
-  // its full processing here — Mirakl PM01 takes minutes to integrate. The
-  // /check route picks them up and chains to OF01 on success. Skip the
-  // dispatch only when this is a chained call from /check, to avoid a loop.
+  // Dispatch PM01 in-process (no HTTP self-fetch — Railway's public-domain
+  // loopback from inside the container is unreliable and previously surfaced
+  // as "internal fetch failed: fetch failed"). Skip the dispatch only when
+  // this is a chained call from /check, to avoid a loop.
   let pm01DispatchedJobId: string | null = null;
   let pm01DispatchedCount = 0;
   let pm01DispatchError: string | null = null;
   if (!dry && needsPm01.length > 0 && !chained) {
     try {
-      const baseUrl = resolveBaseUrl(req);
-      // Forward the auth cookie so the middleware lets the internal fetch
-      // through. Without this it 307s to /login and /products/push never
-      // runs — leaving a stuck "no sync_job_id" error here.
-      const cookie = req.headers.get("cookie") ?? "";
-      const r = await fetch(`${baseUrl}/api/sync/superpharm/products/push`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", cookie },
-        body: JSON.stringify({ mode: "by_ids", ids: needsPm01.map((r) => r.id) }),
+      const result = await dispatchPm01({
+        mode: "by_ids",
+        ids: needsPm01.map((r) => r.id),
       });
-      const j = (await r.json().catch(() => ({}))) as {
-        sync_job_id?: string;
-        sku_count?: number;
-        error?: string;
-        unresolvable_brands?: { sku: string; brand: string }[];
-        rejected?: { sku: string; errors: string[] }[];
-      };
-      if (r.ok) {
-        pm01DispatchedJobId = j.sync_job_id ?? null;
-        pm01DispatchedCount = j.sku_count ?? 0;
+      if (result.ok) {
+        pm01DispatchedJobId = result.sync_job_id ?? null;
+        pm01DispatchedCount = result.sku_count ?? 0;
         if (!pm01DispatchedJobId) {
-          pm01DispatchError = j.error ?? "PM01 dispatch returned no sync_job_id";
+          pm01DispatchError = result.error ?? "PM01 dispatch returned no sync_job_id";
         }
       } else {
         const detail =
-          j.error ??
-          (j.unresolvable_brands && j.unresolvable_brands.length > 0
-            ? `unresolvable brands: ${j.unresolvable_brands.map((b) => `${b.sku}=${b.brand}`).join(", ")}`
-            : `HTTP ${r.status}`);
+          result.error ??
+          (result.unresolvable_brands && result.unresolvable_brands.length > 0
+            ? `unresolvable brands: ${result.unresolvable_brands.map((b) => `${b.sku}=${b.brand}`).join(", ")}`
+            : `dispatch returned status ${result.status ?? "?"}`);
         pm01DispatchError = detail;
       }
     } catch (e) {
-      pm01DispatchError = `internal fetch failed: ${(e as Error).message}`;
+      pm01DispatchError = `dispatchPm01 threw: ${(e as Error).message}`;
     }
   }
   // Surface still-missing-from-catalog ids as a hard rejection ONLY on a
