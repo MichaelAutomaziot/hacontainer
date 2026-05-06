@@ -35,6 +35,11 @@ function copyTree(src, dst) {
 
 copyDir("public", ".next/standalone/public");
 copyDir(".next/static", ".next/standalone/.next/static");
+mkdirSync(resolve(standalone, "scripts"), { recursive: true });
+copyFileSync(
+  resolve(root, "scripts", "start-standalone.mjs"),
+  resolve(standalone, "scripts", "start-standalone.mjs")
+);
 
 if (!existsSync(resolve(standalone, "server.js"))) {
   throw new Error("Standalone server was not generated. Check next.config.js output setting.");

@@ -1,24 +1,17 @@
-const PLACEHOLDER_SUPABASE_URL = "https://placeholder.supabase.co";
-const PLACEHOLDER_SUPABASE_KEY = "placeholder-key";
+export const RUNTIME_SUPABASE_URL_TOKEN = "https://runtime-supabase-url.invalid";
+export const RUNTIME_SUPABASE_ANON_KEY_TOKEN = "runtime-supabase-anon-key";
 
-function requireSupabaseEnv(name: string, value: string | undefined): string {
+function supabaseEnvOrRuntimeToken(value: string | undefined, token: string): string {
   const trimmed = value?.trim();
-
-  if (!trimmed || trimmed === PLACEHOLDER_SUPABASE_URL || trimmed === PLACEHOLDER_SUPABASE_KEY) {
-    throw new Error(
-      `${name} is not configured. Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY before building or starting the dashboard.`
-    );
-  }
-
-  return trimmed;
+  return trimmed || token;
 }
 
-export const SUPABASE_URL = requireSupabaseEnv(
-  "NEXT_PUBLIC_SUPABASE_URL",
-  process.env.NEXT_PUBLIC_SUPABASE_URL
+export const SUPABASE_URL = supabaseEnvOrRuntimeToken(
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+  RUNTIME_SUPABASE_URL_TOKEN
 );
 
-export const SUPABASE_ANON_KEY = requireSupabaseEnv(
-  "NEXT_PUBLIC_SUPABASE_ANON_KEY",
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+export const SUPABASE_ANON_KEY = supabaseEnvOrRuntimeToken(
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+  RUNTIME_SUPABASE_ANON_KEY_TOKEN
 );

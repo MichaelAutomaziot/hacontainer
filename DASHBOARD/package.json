@@ -9,8 +9,8 @@
   },
   "scripts": {
     "dev": "next dev",
-    "build": "node scripts/validate-build-env.mjs && next build && node scripts/prepare-standalone.mjs",
-    "start": "node .next/standalone/server.js",
+    "build": "next build && node scripts/prepare-standalone.mjs",
+    "start": "node .next/standalone/scripts/start-standalone.mjs",
     "typecheck": "tsc --noEmit",
     "lint": "next lint",
     "production": "pnpm build && pnpm start"
