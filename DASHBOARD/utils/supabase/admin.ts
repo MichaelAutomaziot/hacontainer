@@ -17,19 +17,29 @@
  */
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
-const URL = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
-const SR = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
-
 let _admin: SupabaseClient | null = null;
+
+const trim = (v: string | undefined | null): string => (v ?? "").trim();
+
+/** Resolve URL + service-role key from env, accepting either naming convention.
+ *  Read at call time (not module-load) so a fresh process picks up updated env. */
+const readEnv = (): { url: string; serviceKey: string; missing: string[] } => {
+  const url = trim(process.env.NEXT_PUBLIC_SUPABASE_URL) || trim(process.env.SUPABASE_URL);
+  const serviceKey =
+    trim(process.env.SUPABASE_SERVICE_ROLE_KEY) || trim(process.env.SUPABASE_SERVICE_KEY);
+  const missing: string[] = [];
+  if (!url) missing.push("NEXT_PUBLIC_SUPABASE_URL (or SUPABASE_URL)");
+  if (!serviceKey) missing.push("SUPABASE_SERVICE_ROLE_KEY (or SUPABASE_SERVICE_KEY)");
+  return { url, serviceKey, missing };
+};
 
 export const getServiceClient = (): SupabaseClient => {
   if (_admin) return _admin;
-  if (!URL || !SR) {
-    throw new Error(
-      "getServiceClient: NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set"
-    );
+  const { url, serviceKey, missing } = readEnv();
+  if (missing.length > 0) {
+    throw new Error(`getServiceClient: missing env var(s): ${missing.join(", ")}`);
   }
-  _admin = createClient(URL, SR, {
+  _admin = createClient(url, serviceKey, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
   return _admin;
