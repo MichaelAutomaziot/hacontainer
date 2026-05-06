@@ -162,29 +162,44 @@ export const resolveBrandCode = (
   return null;
 };
 
+export interface ResolvedCategory {
+  category_id: string;
+  sp_category_code: string;
+  source: "manual" | "heuristic" | "imported";
+}
+
 /**
- * Pick the best-matching hierarchy code for a free-text Hebrew category.
- * Strategy:
- *   1. Exact case-folded label match against any hierarchy.
- *   2. Substring match (hierarchy label contains the input, or vice versa).
- *   3. Fall back to provided default code.
+ * Resolve a Container category text (e.g. "מקררים") to its Super-Pharm
+ * hierarchy code via the container_category_mappings table.
+ *
+ * Returns null when no approved mapping exists. Callers MUST treat null as
+ * a hard rejection — silently substituting a default ("Home") corrupts the
+ * SP merchandiser's review queue and was the root cause of the original
+ * upload bug.
  */
-export const resolveHierarchyCode = (
-  rawCategory: string | null | undefined,
-  hierarchies: Hierarchy[],
-  defaultCode: string
-): string => {
-  if (!rawCategory) return defaultCode;
-  const target = rawCategory.trim();
-  if (!target) return defaultCode;
-
-  const exact = hierarchies.find((h) => h.label.trim() === target);
-  if (exact) return exact.code;
-
-  const partial = hierarchies
-    .filter((h) => h.level >= 3)
-    .find((h) => h.label.includes(target) || target.includes(h.label));
-  if (partial) return partial.code;
-
-  return defaultCode;
+export const resolveCategoryFromContainerLabel = async (
+  sb: { from: (table: string) => unknown },
+  rawCategory: string | null | undefined
+): Promise<ResolvedCategory | null> => {
+  if (!rawCategory) return null;
+  const norm = rawCategory.trim().toLowerCase();
+  if (!norm) return null;
+  const builder = (sb.from("container_category_mappings") as {
+    select: (cols: string) => {
+      eq: (col: string, val: string) => {
+        eq: (col: string, val: string) => {
+          maybeSingle: () => Promise<{
+            data: ResolvedCategory | null;
+            error: unknown;
+          }>;
+        };
+      };
+    };
+  })
+    .select("category_id, sp_category_code, source")
+    .eq("container_label_normalized", norm)
+    .eq("status", "approved");
+  const { data } = await builder.maybeSingle();
+  if (!data?.category_id || !data?.sp_category_code) return null;
+  return data;
 };
