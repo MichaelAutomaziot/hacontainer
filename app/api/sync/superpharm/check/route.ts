@@ -459,7 +459,7 @@ export async function POST(req: Request) {
     .from("sync_jobs")
     .select("id, type, status, payload, created_at")
     .in("type", ["superpharm_of01", "superpharm_pm01"])
-    .in("status", ["pending_mirakl", "running"]);
+    .eq("status", "running");
   if (jobsErr) {
     return NextResponse.json({ ok: false, error: jobsErr.message }, { status: 500 });
   }

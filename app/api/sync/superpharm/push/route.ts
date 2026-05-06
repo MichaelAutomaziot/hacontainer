@@ -566,7 +566,7 @@ export async function POST(req: Request) {
     .from("sync_jobs")
     .insert({
       type: "superpharm_of01",
-      status: "pending_mirakl",
+      status: "running",
       payload: {
         import_id: importId,
         idempotency_key: idempotencyKey,
