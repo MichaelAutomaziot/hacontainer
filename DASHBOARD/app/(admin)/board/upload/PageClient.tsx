@@ -391,6 +391,30 @@ export default function BoardUpload() {
     });
   };
 
+  /** A row is "ready to upload" iff it has the two PM01 hard requirements
+   *  (image and brand). Missing EAN is OK — PM01 auto-mints internal EANs. */
+  const isReadyToUpload = (r: UploadRow): boolean =>
+    r.bucket !== "done" && !!r.image && !!r.brand;
+
+  const selectAllReadyVisible = () => {
+    setSelection((prev) => {
+      const next = new Set(prev);
+      for (const r of filteredRows) {
+        if (isReadyToUpload(r)) next.add(r.id);
+      }
+      return next;
+    });
+  };
+
+  /** How many visible rows the "ready" filter would skip. Used to label the
+   *  skipped-count chip; nothing to surface when zero. */
+  const visibleSkippedCount = useMemo(
+    () =>
+      filteredRows.filter((r) => r.bucket !== "done" && !isReadyToUpload(r))
+        .length,
+    [filteredRows],
+  );
+
   const clearSelection = () => setSelection(new Set());
 
   const selectedRows = useMemo(
@@ -722,13 +746,34 @@ export default function BoardUpload() {
         title={`רשימת מוצרים (${fmt.format(filteredRows.length)})`}
         subtitle={selection.size > 0 ? `${selection.size} נבחרו` : "סמנו את המוצרים שתרצו להעלות"}
         actions={
-          <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+          <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap alignItems="center">
+            <Tooltip title="בוחר רק מוצרים עם תמונה ומותג — אלו שניתן להעלות בפועל. ברקוד חסר נוצר אוטומטית.">
+              <Button
+                size="small"
+                variant="contained"
+                color="primary"
+                startIcon={<SelectAllIcon />}
+                onClick={selectAllReadyVisible}
+              >
+                בחר את כל המוכנים להעלאה
+              </Button>
+            </Tooltip>
             <Button size="small" variant="outlined" startIcon={<SelectAllIcon />} onClick={selectAllVisible}>
               בחר הכל
             </Button>
             <Button size="small" variant="text" startIcon={<ClearAllIcon />} onClick={clearSelection} disabled={selection.size === 0}>
               נקה בחירה
             </Button>
+            {visibleSkippedCount > 0 && (
+              <Tooltip title="מוצרים ללא תמונה או ללא מותג. PM01 לא יכול להעלות אותם — תקנו תחילה במלאי.">
+                <Chip
+                  size="small"
+                  color="warning"
+                  variant="outlined"
+                  label={`${fmt.format(visibleSkippedCount)} ידלגו (חסר תמונה/מותג)`}
+                />
+              </Tooltip>
+            )}
           </Stack>
         }
       />
