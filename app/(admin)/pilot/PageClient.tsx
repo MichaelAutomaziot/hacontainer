@@ -180,17 +180,22 @@ export default function PilotPage() {
             </Button>
           </span>
         </Tooltip>
-        <Tooltip title={pushBusy ? "שולח לסופר-פארם…" : "שלח את כל המוצרים בסטטוס approved_for_pilot או transformed"}>
+        <Tooltip title={pushBusy ? "שולח לסופר-פארם…" : "שלח את כל המוצרים שמוכנים: הומר/אושר/מחכה-לקטלוג/קטלוג-סונכרן. אם המוצר טרם בקטלוג SP — ירוץ PM01 קודם, אחרת OF01."}>
           <span>
             <Button
               startIcon={<UploadIcon />}
               variant="contained"
               color="success"
-              disabled={pushBusy || ((counts.approved_for_pilot ?? 0) + (counts.transformed ?? 0)) === 0}
+              disabled={pushBusy || ((counts.approved_for_pilot ?? 0) + (counts.transformed ?? 0) + (counts.pending_catalog ?? 0) + (counts.catalog_synced ?? 0)) === 0}
               onClick={async () => {
                 if (pushBusy) return;
                 const sendIds = rows
-                  .filter((r) => r.pilot_status === "approved_for_pilot" || r.pilot_status === "transformed")
+                  .filter((r) =>
+                    r.pilot_status === "approved_for_pilot" ||
+                    r.pilot_status === "transformed" ||
+                    r.pilot_status === "pending_catalog" ||
+                    r.pilot_status === "catalog_synced"
+                  )
                   .map((r) => r.id);
                 if (sendIds.length === 0) return;
                 setPushBusy(true);
