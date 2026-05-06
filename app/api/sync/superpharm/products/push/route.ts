@@ -55,10 +55,29 @@ interface InvRow {
   brand: string | null;
   category: string | null;
   images: string[] | null;
+  technical_specs: Record<string, unknown> | null;
 }
 
 const INV_COLS =
-  "id, name_he, description_he, ean, sku, brand, category, images";
+  "id, name_he, description_he, ean, sku, brand, category, images, technical_specs";
+
+/** Extract numeric-keyed entries from technical_specs and stringify their
+ *  values. These flow as PM01 extra-attribute columns keyed by Mirakl
+ *  attribute code (e.g. "5589" → screen size). Non-numeric keys (brand,
+ *  warranty_he, delivery_days, etc.) are ignored — they are not Mirakl
+ *  attribute codes. */
+const technicalSpecsToExtraAttrs = (
+  ts: Record<string, unknown> | null | undefined
+): Record<string, string> => {
+  if (!ts || typeof ts !== "object") return {};
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(ts)) {
+    if (!/^\d+$/.test(k)) continue;
+    if (v === null || v === undefined || v === "") continue;
+    out[k] = String(v);
+  }
+  return out;
+};
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -292,6 +311,7 @@ export async function POST(req: Request) {
         brand_code: brandCode,
         category_code: categoryCode,
         image_url: inv.images![0]!,
+        extra_attrs: technicalSpecsToExtraAttrs(inv.technical_specs),
       },
     });
   }

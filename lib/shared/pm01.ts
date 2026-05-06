@@ -30,9 +30,13 @@ export interface PM01Row {
   category_code: string;
   /** First / primary product image URL. */
   image_url: string;
+  /** Category-specific required attributes, keyed by Mirakl attribute code.
+   *  Examples for SP: "5589" (screen size), category-specific value-list
+   *  codes. Values are emitted as additional CSV columns named by the code. */
+  extra_attrs?: Record<string, string>;
 }
 
-const PM01_COLS = [
+const PM01_BASE_COLS = [
   "shop_sku",
   "ean",
   "product-id",
@@ -52,18 +56,31 @@ const escapeSemiCsv = (val: unknown): string => {
 };
 
 export const buildPM01Csv = (rows: PM01Row[]): string => {
-  const header = PM01_COLS.join(";");
+  // Union of every extra_attrs key across rows — emitted as additional
+  // columns. Rows that don't define a particular attr leave the cell empty.
+  const extraCols: string[] = [];
+  const seen = new Set<string>();
+  for (const r of rows) {
+    for (const k of Object.keys(r.extra_attrs ?? {})) {
+      if (!seen.has(k)) {
+        seen.add(k);
+        extraCols.push(k);
+      }
+    }
+  }
+  const header = [...PM01_BASE_COLS, ...extraCols].join(";");
   const lines = rows.map((r) =>
     [
       r.shop_sku,
       r.ean,
-      r.ean, // product-id == ean
+      r.ean,
       "EAN",
       r.name,
       r.description ?? "",
       r.brand_code,
       r.category_code,
       r.image_url,
+      ...extraCols.map((k) => r.extra_attrs?.[k] ?? ""),
     ]
       .map(escapeSemiCsv)
       .join(";")
