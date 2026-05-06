@@ -381,12 +381,13 @@ export async function POST(req: Request) {
     })
     .select("id")
     .single();
-  if (jobErr) {
-    console.error(`[products/push] sync_jobs insert failed: ${jobErr.message}`);
+  if (jobErr || !jobRow?.id) {
+    const reason = jobErr?.message ?? "insert returned no row (RLS or schema mismatch)";
+    console.error(`[products/push] sync_jobs insert failed: ${reason}`);
     return NextResponse.json(
       {
         ok: false,
-        error: `Mirakl PM01 import_id=${importId} succeeded but sync_jobs insert failed: ${jobErr.message}`,
+        error: `Mirakl PM01 import_id=${importId} succeeded but sync_jobs insert failed: ${reason}`,
         import_id: importId,
         idempotency_key: idempotencyKey,
         sku_count: accepted.length,
