@@ -333,9 +333,9 @@ export async function POST(req: Request) {
 
   // 3b. Catalog gate: official imports require the EAN to already exist in SP's
   // product catalog. Otherwise Mirakl rejects with "state of the product is
-  // unknown". Carve those rows off into a separate rejection bucket so callers
-  // can route them to a PM01 (product create) flow instead of OF01.
-  let blockedByCatalog: { sku: string; inv_id: number; errors: string[] }[] = [];
+  // unknown". Carve those rows off and auto-dispatch a PM01 (product create)
+  // for them; /check will chain back to OF01 once the products are cataloged.
+  const needsPm01: InvRow[] = [];
   if (importType === "official" && invRows.length > 0) {
     const eansToCheck = invRows
       .map((r) => r.ean?.trim())
@@ -344,13 +344,7 @@ export async function POST(req: Request) {
     const survivors: InvRow[] = [];
     for (const r of invRows) {
       if (r.ean && !cataloged.has(r.ean.trim())) {
-        blockedByCatalog.push({
-          sku: r.sku ?? `inv:${r.id}`,
-          inv_id: r.id,
-          errors: [
-            "EAN not in SP catalog — needs PM01 (product create) before OF01 with import_type=official",
-          ],
-        });
+        needsPm01.push(r);
       } else {
         survivors.push(r);
       }
@@ -358,18 +352,72 @@ export async function POST(req: Request) {
     invRows = survivors;
   }
 
+  // Fire-and-forget PM01 dispatch via the dedicated endpoint. We don't await
+  // its full processing here — Mirakl PM01 takes minutes to integrate. The
+  // /check route picks them up and chains to OF01 on success. Skip the
+  // dispatch when this very push is a chained call (mode=by_ids carrying the
+  // post-PM01 catalog_synced ids), to avoid a loop.
+  let pm01DispatchedJobId: string | null = null;
+  let pm01DispatchedCount = 0;
+  let pm01DispatchError: string | null = null;
+  if (!dry && needsPm01.length > 0 && mode !== "by_ids") {
+    try {
+      const reqUrl = new URL(req.url);
+      const baseUrl = `${reqUrl.protocol}//${reqUrl.host}`;
+      const r = await fetch(`${baseUrl}/api/sync/superpharm/products/push`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode: "by_ids", ids: needsPm01.map((r) => r.id) }),
+      });
+      const j = (await r.json()) as { sync_job_id?: string; sku_count?: number; error?: string };
+      if (r.ok) {
+        pm01DispatchedJobId = j.sync_job_id ?? null;
+        pm01DispatchedCount = j.sku_count ?? 0;
+      } else {
+        pm01DispatchError = j.error ?? `HTTP ${r.status}`;
+      }
+    } catch (e) {
+      pm01DispatchError = (e as Error).message;
+    }
+  }
+  // If /push was actually a chained call from /check (mode=by_ids), surface
+  // any still-missing-from-catalog ids as a hard rejection — this should not
+  // happen after PM01 success, but we keep the bucket so a regression is
+  // visible rather than silent.
+  const blockedByCatalog: { sku: string; inv_id: number; errors: string[] }[] =
+    needsPm01.length > 0 && mode === "by_ids"
+      ? needsPm01.map((r) => ({
+          sku: r.sku ?? `inv:${r.id}`,
+          inv_id: r.id,
+          errors: ["EAN still missing from SP catalog after PM01 — investigate transformation_error_report"],
+        }))
+      : [];
+
   if (invRows.length === 0) {
+    // No OF01-eligible rows. If we kicked off PM01 for this batch, that's a
+    // valid "deferred" outcome (pilot button click → catalog sync started,
+    // OF01 will fire later via /check). Otherwise it's a true error.
+    const hasDeferredPm01 = pm01DispatchedJobId !== null && pm01DispatchedCount > 0;
     return NextResponse.json(
       {
-        ok: dry, // dry-run with zero candidates is a fine "nothing to do"
+        ok: dry || hasDeferredPm01,
         eligible: 0,
         blocked_by_duplicate: blockedByDuplicate,
         blocked_by_catalog: blockedByCatalog.length,
         blocked_by_priceFor: 0,
         rejected: blockedByCatalog,
-        ...(dry ? {} : { error: "no inventory rows match selection (after catalog gate)" }),
+        pm01_dispatched_count: pm01DispatchedCount,
+        pm01_sync_job_id: pm01DispatchedJobId,
+        pm01_dispatch_error: pm01DispatchError,
+        ...(dry || hasDeferredPm01
+          ? hasDeferredPm01
+            ? {
+                note: `${pm01DispatchedCount} products sent to SP catalog (PM01). OF01 will auto-trigger on next /check call after Mirakl finishes integrating them.`,
+              }
+            : {}
+          : { error: "no inventory rows match selection (after catalog gate)" }),
       },
-      { status: dry ? 200 : 400 }
+      { status: dry || hasDeferredPm01 ? 200 : 400 }
     );
   }
 
@@ -432,6 +480,8 @@ export async function POST(req: Request) {
       blocked_by_catalog: blockedByCatalog.length,
       blocked_by_priceFor: rejected.length,
       rejected: [...rejected, ...blockedByCatalog],
+      pm01_dispatched_count: pm01DispatchedCount,
+      pm01_sync_job_id: pm01DispatchedJobId,
       total_candidates: invRows.length + blockedByDuplicate + blockedByCatalog.length,
       elapsed_s: Number(((Date.now() - t0) / 1000).toFixed(2)),
     });
@@ -539,7 +589,12 @@ export async function POST(req: Request) {
     blocked_by_duplicate: blockedByDuplicate,
     blocked_by_catalog: blockedByCatalog.length,
     rejected: [...rejected, ...blockedByCatalog],
-    note: "Mirakl import submitted; status will resolve via POST /api/sync/superpharm/check",
+    pm01_dispatched_count: pm01DispatchedCount,
+    pm01_sync_job_id: pm01DispatchedJobId,
+    note:
+      pm01DispatchedCount > 0
+        ? `OF01 submitted for ${accepted.length} cataloged offers; PM01 submitted for ${pm01DispatchedCount} new products. Both resolve via POST /api/sync/superpharm/check.`
+        : "Mirakl OF01 submitted; status will resolve via POST /api/sync/superpharm/check",
     elapsed_s: elapsed,
   });
 }

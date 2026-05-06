@@ -1,23 +1,28 @@
 /**
  * POST /api/sync/superpharm/check
  *
- * Polls every sync_jobs row in status='pending_mirakl' against Mirakl's
- * /api/offers/imports/{import_id} endpoint and reconciles local bookkeeping:
+ * Polls Mirakl for any sync_jobs row in 'pending_mirakl' (or legacy 'running')
+ * status and reconciles local bookkeeping. Handles both job types:
  *
- *   - Mirakl status PENDING/RUNNING/QUEUED → leave as 'pending_mirakl'
- *   - Mirakl status COMPLETE
- *       lines_in_success > 0  → mark accepted offers as 'pending' in
- *                                 channel_listings, promote pilot_status to
- *                                 'uploaded'.
- *       lines_in_error > 0    → fetch error_report, attach error_message to
- *                                 channel_listings.attributes, mark as
- *                                 'rejected', roll pilot_status back to NULL.
- *       sync_jobs.status      → 'done' (mixed counts still 'done' so the job
- *                                 doesn't retry; per-row state is the source
- *                                 of truth).
- *   - Mirakl status FAILED → sync_jobs.status='failed', all listings rejected.
+ *   superpharm_pm01 (product create / update)
+ *     /api/products/imports/{id} returns import_status (PENDING|SENT|COMPLETE|
+ *       WAITING_HOST|FAILED) and integration_details.{products_successfully_
+ *       synchronized, invalid_products, rejected_products}.
+ *     transformation_error_report carries per-row rejection reasons.
+ *     On success → mark inventory.pilot_status='catalog_synced' and trigger an
+ *       OF01 push for the same inv ids by inserting a new sync_jobs row that
+ *       /push will pick up next time, OR by directly invoking the OF01 push
+ *       handler. We use the direct-invoke path so the user only needs to call
+ *       /check once.
  *
- * Idempotent: rerunning on a 'done' job is a no-op (filter excludes them).
+ *   superpharm_of01 (offer create)
+ *     /api/offers/imports/{id} returns status (PENDING|RUNNING|QUEUED|COMPLETE
+ *       |FAILED) and lines_in_success / lines_in_error.
+ *     error_report carries per-SKU rejection reasons.
+ *     On success → state='pending', pilot_status='uploaded'. On failure →
+ *       state='rejected', pilot_status=NULL, error attached to attributes.
+ *
+ * Idempotent: rerunning on a 'completed'/'failed' job is a no-op.
  */
 import { NextResponse } from "next/server";
 import { getServiceClient } from "@/utils/supabase/admin";
@@ -26,23 +31,36 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
-interface MiraklImportStatus {
+interface OfferImportStatus {
   import_id: number;
   status: "PENDING" | "QUEUED" | "RUNNING" | "COMPLETE" | "FAILED" | string;
   lines_in_success: number;
   lines_in_error: number;
-  lines_in_pending?: number;
   has_error_report?: boolean;
+}
+
+interface ProductImportStatus {
+  import_id: number;
+  import_status: "PENDING" | "SENT" | "COMPLETE" | "WAITING_HOST" | "FAILED" | string;
+  has_transformation_error_report?: boolean;
+  has_error_report?: boolean;
+  transform_lines_in_success?: number;
+  transform_lines_in_error?: number;
+  integration_details?: {
+    products_successfully_synchronized?: number;
+    invalid_products?: number;
+    rejected_products?: number;
+    products_with_synchronization_issues?: number;
+    products_with_wrong_identifiers?: number;
+  };
 }
 
 interface ErrorReportRow {
   sku: string;
-  product_id?: string;
-  error_line?: string;
   error_message?: string;
 }
 
-const fetchImportStatus = async (importId: number): Promise<MiraklImportStatus | null> => {
+const fetchOfferStatus = async (importId: number): Promise<OfferImportStatus | null> => {
   const base = process.env.MIRAKL_BASE_URL ?? "https://superpharm-prod.mirakl.net";
   const key = process.env.MIRAKL_API_KEY ?? "";
   if (!key) throw new Error("MIRAKL_API_KEY not set");
@@ -50,11 +68,21 @@ const fetchImportStatus = async (importId: number): Promise<MiraklImportStatus |
     headers: { Authorization: key, Accept: "application/json" },
   });
   if (!res.ok) return null;
-  return (await res.json()) as MiraklImportStatus;
+  return (await res.json()) as OfferImportStatus;
 };
 
-/** Parse Mirakl's semicolon-separated CSV error report into per-SKU rows. */
-const fetchErrorReport = async (importId: number): Promise<ErrorReportRow[]> => {
+const fetchProductStatus = async (importId: number): Promise<ProductImportStatus | null> => {
+  const base = process.env.MIRAKL_BASE_URL ?? "https://superpharm-prod.mirakl.net";
+  const key = process.env.MIRAKL_API_KEY ?? "";
+  if (!key) throw new Error("MIRAKL_API_KEY not set");
+  const res = await fetch(`${base}/api/products/imports/${importId}`, {
+    headers: { Authorization: key, Accept: "application/json" },
+  });
+  if (!res.ok) return null;
+  return (await res.json()) as ProductImportStatus;
+};
+
+const fetchOfferErrorReport = async (importId: number): Promise<ErrorReportRow[]> => {
   const base = process.env.MIRAKL_BASE_URL ?? "https://superpharm-prod.mirakl.net";
   const key = process.env.MIRAKL_API_KEY ?? "";
   if (!key) return [];
@@ -62,29 +90,42 @@ const fetchErrorReport = async (importId: number): Promise<ErrorReportRow[]> => 
     headers: { Authorization: key, Accept: "text/csv" },
   });
   if (!res.ok) return [];
-  const csv = await res.text();
+  return parseSemiCsv(await res.text(), { skuCol: "sku", msgCol: "error-message" });
+};
+
+const fetchProductErrorReport = async (importId: number): Promise<ErrorReportRow[]> => {
+  const base = process.env.MIRAKL_BASE_URL ?? "https://superpharm-prod.mirakl.net";
+  const key = process.env.MIRAKL_API_KEY ?? "";
+  if (!key) return [];
+  const res = await fetch(`${base}/api/products/imports/${importId}/transformation_error_report`, {
+    headers: { Authorization: key, Accept: "text/csv" },
+  });
+  if (!res.ok) return [];
+  return parseSemiCsv(await res.text(), { skuCol: "shop_sku", msgCol: "errors" });
+};
+
+const parseSemiCsv = (
+  csv: string,
+  cols: { skuCol: string; msgCol: string }
+): ErrorReportRow[] => {
   const lines = csv.split(/\r?\n/).filter((l) => l.trim().length > 0);
   if (lines.length < 2) return [];
-  const header = parseSemiCsvRow(lines[0]).map((h) => h.toLowerCase());
-  const skuIdx = header.indexOf("sku");
-  const pidIdx = header.indexOf("product-id");
-  const lineIdx = header.indexOf("error-line");
-  const msgIdx = header.indexOf("error-message");
+  const header = parseSemiRow(lines[0]).map((h) => h.toLowerCase());
+  const skuIdx = header.indexOf(cols.skuCol);
+  const altSkuIdx = skuIdx === -1 ? header.indexOf("sku") : skuIdx;
+  const msgIdx = header.indexOf(cols.msgCol);
   const out: ErrorReportRow[] = [];
   for (let i = 1; i < lines.length; i++) {
-    const cols = parseSemiCsvRow(lines[i]);
+    const row = parseSemiRow(lines[i]);
     out.push({
-      sku: cols[skuIdx] ?? "",
-      product_id: cols[pidIdx] ?? "",
-      error_line: cols[lineIdx] ?? "",
-      error_message: cols[msgIdx] ?? "",
+      sku: row[altSkuIdx] ?? "",
+      error_message: row[msgIdx] ?? "",
     });
   }
   return out;
 };
 
-/** Mirakl error CSV uses ; as field sep and " for quoting (with "" escapes). */
-const parseSemiCsvRow = (line: string): string[] => {
+const parseSemiRow = (line: string): string[] => {
   const out: string[] = [];
   let cur = "";
   let inQuotes = false;
@@ -113,48 +154,311 @@ const parseSemiCsvRow = (line: string): string[] => {
   return out;
 };
 
-/** Pull inv_id out of "inv:1234" (sku format used by push route). */
 const skuToInvId = (sku: string): number | null => {
   const m = sku.match(/^inv:(\d+)$/);
   return m ? Number(m[1]) : null;
 };
 
-export async function POST(_req: Request) {
+interface OF01Payload {
+  import_id?: number;
+  inv_ids?: number[];
+  skus?: string[];
+}
+interface PM01Payload extends OF01Payload {
+  /** Set once the chained OF01 push is queued, to avoid double-firing. */
+  of01_chained?: boolean;
+}
+
+type SyncJob = {
+  id: string;
+  type: "superpharm_of01" | "superpharm_pm01" | string;
+  status: string;
+  payload: PM01Payload | OF01Payload | null;
+  created_at: string;
+};
+
+interface CheckSummary {
+  job_id: string;
+  job_type: string;
+  import_id: number | null;
+  mirakl_status: string;
+  sync_status: string;
+  success: number;
+  errors: number;
+  promoted_inv: number;
+  rolled_back_inv: number;
+  chained_of01_job_id?: string;
+}
+
+/* ----- OF01 reconciliation ----- */
+const reconcileOF01 = async (
+  sb: ReturnType<typeof getServiceClient>,
+  job: SyncJob,
+  importId: number
+): Promise<CheckSummary> => {
+  const status = await fetchOfferStatus(importId);
+  if (!status) {
+    return {
+      job_id: job.id,
+      job_type: job.type,
+      import_id: importId,
+      mirakl_status: "404",
+      sync_status: job.status,
+      success: 0,
+      errors: 0,
+      promoted_inv: 0,
+      rolled_back_inv: 0,
+    };
+  }
+  if (status.status !== "COMPLETE" && status.status !== "FAILED") {
+    return {
+      job_id: job.id,
+      job_type: job.type,
+      import_id: importId,
+      mirakl_status: status.status,
+      sync_status: job.status,
+      success: status.lines_in_success ?? 0,
+      errors: status.lines_in_error ?? 0,
+      promoted_inv: 0,
+      rolled_back_inv: 0,
+    };
+  }
+
+  const errorRows = status.has_error_report ? await fetchOfferErrorReport(importId) : [];
+  const erroredSkuToMsg = new Map<string, string>();
+  for (const row of errorRows) {
+    if (row.sku) erroredSkuToMsg.set(row.sku, row.error_message ?? "unknown");
+  }
+
+  const payload = (job.payload ?? {}) as OF01Payload;
+  const submittedSkus: string[] = payload.skus ?? [];
+  const successSkus = submittedSkus.filter((s) => !erroredSkuToMsg.has(s));
+  const successInvIds = successSkus.map(skuToInvId).filter((n): n is number => n !== null);
+  const erroredInvIds = Array.from(erroredSkuToMsg.keys())
+    .map(skuToInvId)
+    .filter((n): n is number => n !== null);
+
+  if (successInvIds.length > 0) {
+    await sb
+      .from("channel_listings")
+      .update({ state: "pending" })
+      .eq("channel", "superpharm")
+      .in("product_id", successInvIds);
+    await sb
+      .from("inventory")
+      .update({ pilot_status: "uploaded" })
+      .in("id", successInvIds);
+  }
+
+  let rolledBack = 0;
+  for (const [sku, msg] of erroredSkuToMsg.entries()) {
+    const invId = skuToInvId(sku);
+    if (invId === null) continue;
+    const { error: clErr } = await sb
+      .from("channel_listings")
+      .update({
+        state: "rejected",
+        attributes: { import_id: importId, mirakl_error: msg },
+      })
+      .eq("channel", "superpharm")
+      .eq("product_id", invId);
+    if (clErr) console.warn(`[check OF01] channel_listings update failed: ${clErr.message}`);
+    rolledBack++;
+  }
+  if (erroredInvIds.length > 0) {
+    await sb.from("inventory").update({ pilot_status: null }).in("id", erroredInvIds);
+  }
+
+  const finalStatus =
+    status.status === "FAILED"
+      ? "failed"
+      : status.lines_in_success > 0
+      ? "completed"
+      : "failed";
+  await sb
+    .from("sync_jobs")
+    .update({
+      status: finalStatus,
+      payload: {
+        ...payload,
+        mirakl_status: status.status,
+        lines_in_success: status.lines_in_success,
+        lines_in_error: status.lines_in_error,
+        checked_at: new Date().toISOString(),
+        per_sku_errors: Array.from(erroredSkuToMsg.entries()).map(([sku, msg]) => ({
+          sku,
+          error: msg,
+        })),
+      },
+    })
+    .eq("id", job.id);
+
+  return {
+    job_id: job.id,
+    job_type: job.type,
+    import_id: importId,
+    mirakl_status: status.status,
+    sync_status: finalStatus,
+    success: status.lines_in_success ?? 0,
+    errors: status.lines_in_error ?? 0,
+    promoted_inv: successInvIds.length,
+    rolled_back_inv: rolledBack,
+  };
+};
+
+/* ----- PM01 reconciliation ----- */
+const reconcilePM01 = async (
+  sb: ReturnType<typeof getServiceClient>,
+  job: SyncJob,
+  importId: number,
+  baseUrl: string
+): Promise<CheckSummary> => {
+  const status = await fetchProductStatus(importId);
+  if (!status) {
+    return {
+      job_id: job.id,
+      job_type: job.type,
+      import_id: importId,
+      mirakl_status: "404",
+      sync_status: job.status,
+      success: 0,
+      errors: 0,
+      promoted_inv: 0,
+      rolled_back_inv: 0,
+    };
+  }
+
+  // SP product imports go PENDING → SENT → WAITING_HOST → COMPLETE.
+  // We treat anything other than COMPLETE/FAILED as still in flight.
+  const inFlight = !["COMPLETE", "FAILED"].includes(status.import_status);
+  const success = status.integration_details?.products_successfully_synchronized ?? 0;
+  const transformErrors = status.transform_lines_in_error ?? 0;
+
+  if (inFlight) {
+    return {
+      job_id: job.id,
+      job_type: job.type,
+      import_id: importId,
+      mirakl_status: status.import_status,
+      sync_status: job.status,
+      success,
+      errors: transformErrors,
+      promoted_inv: 0,
+      rolled_back_inv: 0,
+    };
+  }
+
+  // Errored rows → harvest from transformation_error_report.
+  const errorRows = status.has_transformation_error_report
+    ? await fetchProductErrorReport(importId)
+    : [];
+  const erroredSkuToMsg = new Map<string, string>();
+  for (const row of errorRows) {
+    if (row.sku) erroredSkuToMsg.set(row.sku, row.error_message ?? "unknown");
+  }
+
+  const payload = (job.payload ?? {}) as PM01Payload;
+  const submittedSkus: string[] = payload.skus ?? [];
+  const successSkus = submittedSkus.filter((s) => !erroredSkuToMsg.has(s));
+  const successInvIds = successSkus.map(skuToInvId).filter((n): n is number => n !== null);
+  const erroredInvIds = Array.from(erroredSkuToMsg.keys())
+    .map(skuToInvId)
+    .filter((n): n is number => n !== null);
+
+  // Promote successful PM01 lines: catalog_synced lets OF01 push pick them up.
+  if (successInvIds.length > 0) {
+    await sb
+      .from("inventory")
+      .update({ pilot_status: "catalog_synced" })
+      .in("id", successInvIds);
+  }
+  // Errored: roll back to NULL with the reason exposed via audit log.
+  if (erroredInvIds.length > 0) {
+    await sb.from("inventory").update({ pilot_status: null }).in("id", erroredInvIds);
+  }
+
+  // Chain → OF01 push for the freshly cataloged ids.
+  let chainedJobId: string | undefined;
+  if (successInvIds.length > 0 && !payload.of01_chained) {
+    try {
+      const res = await fetch(`${baseUrl}/api/sync/superpharm/push`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode: "by_ids", ids: successInvIds, importType: "official" }),
+      });
+      if (res.ok) {
+        const json = (await res.json()) as { sync_job_id?: string };
+        chainedJobId = json.sync_job_id ?? undefined;
+      } else {
+        console.warn(`[check PM01] OF01 chain push HTTP ${res.status}`);
+      }
+    } catch (e) {
+      console.warn(`[check PM01] OF01 chain push failed: ${(e as Error).message}`);
+    }
+  }
+
+  const finalStatus = success > 0 ? "completed" : "failed";
+  await sb
+    .from("sync_jobs")
+    .update({
+      status: finalStatus,
+      payload: {
+        ...payload,
+        mirakl_status: status.import_status,
+        products_successfully_synchronized: success,
+        transform_lines_in_error: transformErrors,
+        checked_at: new Date().toISOString(),
+        per_sku_errors: Array.from(erroredSkuToMsg.entries()).map(([sku, msg]) => ({
+          sku,
+          error: msg,
+        })),
+        of01_chained: !!chainedJobId,
+        of01_chained_job_id: chainedJobId,
+      },
+    })
+    .eq("id", job.id);
+
+  return {
+    job_id: job.id,
+    job_type: job.type,
+    import_id: importId,
+    mirakl_status: status.import_status,
+    sync_status: finalStatus,
+    success,
+    errors: transformErrors,
+    promoted_inv: successInvIds.length,
+    rolled_back_inv: erroredInvIds.length,
+    chained_of01_job_id: chainedJobId,
+  };
+};
+
+export async function POST(req: Request) {
   const sb = getServiceClient();
   const t0 = Date.now();
 
-  // 1. Pending jobs.
+  // Resolve own origin so PM01 → OF01 chain hits the same deployment.
+  const reqUrl = new URL(req.url);
+  const baseUrl = `${reqUrl.protocol}//${reqUrl.host}`;
+
   const { data: jobs, error: jobsErr } = await sb
     .from("sync_jobs")
-    .select("id, status, payload, created_at")
-    .eq("type", "superpharm_of01")
-    .in("status", ["pending_mirakl", "running"]); // include legacy 'running' rows
+    .select("id, type, status, payload, created_at")
+    .in("type", ["superpharm_of01", "superpharm_pm01"])
+    .in("status", ["pending_mirakl", "running"]);
   if (jobsErr) {
     return NextResponse.json({ ok: false, error: jobsErr.message }, { status: 500 });
   }
 
-  const summary: {
-    job_id: string;
-    import_id: number | null;
-    mirakl_status: string;
-    sync_status: string;
-    success: number;
-    errors: number;
-    promoted_inv: number;
-    rolled_back_inv: number;
-  }[] = [];
+  const summary: CheckSummary[] = [];
 
-  for (const job of jobs ?? []) {
-    const payload = (job.payload ?? {}) as {
-      import_id?: number;
-      inv_ids?: number[];
-      skus?: string[];
-    };
+  for (const job of (jobs ?? []) as SyncJob[]) {
+    const payload = (job.payload ?? {}) as OF01Payload;
     const importId = typeof payload.import_id === "number" ? payload.import_id : null;
     if (!importId) {
       await sb.from("sync_jobs").update({ status: "failed" }).eq("id", job.id);
       summary.push({
         job_id: job.id,
+        job_type: job.type,
         import_id: null,
         mirakl_status: "n/a",
         sync_status: "failed",
@@ -165,144 +469,25 @@ export async function POST(_req: Request) {
       });
       continue;
     }
-
-    let status: MiraklImportStatus | null;
     try {
-      status = await fetchImportStatus(importId);
+      if (job.type === "superpharm_pm01") {
+        summary.push(await reconcilePM01(sb, job, importId, baseUrl));
+      } else {
+        summary.push(await reconcileOF01(sb, job, importId));
+      }
     } catch (e) {
       summary.push({
         job_id: job.id,
+        job_type: job.type,
         import_id: importId,
-        mirakl_status: `fetch-error: ${(e as Error).message}`,
+        mirakl_status: `error: ${(e as Error).message}`,
         sync_status: job.status,
         success: 0,
         errors: 0,
         promoted_inv: 0,
         rolled_back_inv: 0,
       });
-      continue;
     }
-    if (!status) {
-      summary.push({
-        job_id: job.id,
-        import_id: importId,
-        mirakl_status: "404",
-        sync_status: job.status,
-        success: 0,
-        errors: 0,
-        promoted_inv: 0,
-        rolled_back_inv: 0,
-      });
-      continue;
-    }
-
-    if (status.status !== "COMPLETE" && status.status !== "FAILED") {
-      summary.push({
-        job_id: job.id,
-        import_id: importId,
-        mirakl_status: status.status,
-        sync_status: job.status,
-        success: status.lines_in_success,
-        errors: status.lines_in_error,
-        promoted_inv: 0,
-        rolled_back_inv: 0,
-      });
-      continue;
-    }
-
-    // Resolve per-SKU outcomes via error report.
-    const errorRows = status.has_error_report ? await fetchErrorReport(importId) : [];
-    const erroredSkuToMsg = new Map<string, string>();
-    for (const row of errorRows) {
-      if (row.sku) erroredSkuToMsg.set(row.sku, row.error_message ?? "unknown");
-    }
-
-    const submittedSkus: string[] = payload.skus ?? [];
-    const successSkus = submittedSkus.filter((s) => !erroredSkuToMsg.has(s));
-    const successInvIds = successSkus
-      .map(skuToInvId)
-      .filter((n): n is number => n !== null);
-    const erroredInvIds = Array.from(erroredSkuToMsg.keys())
-      .map(skuToInvId)
-      .filter((n): n is number => n !== null);
-
-    // Promote successful listings.
-    if (successInvIds.length > 0) {
-      await sb
-        .from("channel_listings")
-        .update({ state: "pending" })
-        .eq("channel", "superpharm")
-        .in("product_id", successInvIds);
-      await sb
-        .from("inventory")
-        .update({ pilot_status: "uploaded" })
-        .in("id", successInvIds);
-    }
-
-    // Roll back rejected listings, attach the error message.
-    let rolledBack = 0;
-    for (const [sku, msg] of erroredSkuToMsg.entries()) {
-      const invId = skuToInvId(sku);
-      if (invId === null) continue;
-      const { error: clErr } = await sb
-        .from("channel_listings")
-        .update({
-          state: "rejected",
-          attributes: {
-            import_id: importId,
-            mirakl_error: msg,
-          },
-        })
-        .eq("channel", "superpharm")
-        .eq("product_id", invId);
-      if (clErr) {
-        console.warn(`[check] channel_listings update failed: ${clErr.message}`);
-      }
-      rolledBack++;
-    }
-    if (erroredInvIds.length > 0) {
-      // Roll inventory.pilot_status from 'uploading' back to NULL so user can
-      // requeue after fixing the underlying issue (e.g. PM01 first).
-      await sb
-        .from("inventory")
-        .update({ pilot_status: null })
-        .in("id", erroredInvIds);
-    }
-
-    const finalStatus =
-      status.status === "FAILED"
-        ? "failed"
-        : status.lines_in_success > 0
-        ? "completed"
-        : "failed";
-    await sb
-      .from("sync_jobs")
-      .update({
-        status: finalStatus,
-        payload: {
-          ...payload,
-          mirakl_status: status.status,
-          lines_in_success: status.lines_in_success,
-          lines_in_error: status.lines_in_error,
-          checked_at: new Date().toISOString(),
-          per_sku_errors: Array.from(erroredSkuToMsg.entries()).map(([sku, msg]) => ({
-            sku,
-            error: msg,
-          })),
-        },
-      })
-      .eq("id", job.id);
-
-    summary.push({
-      job_id: job.id,
-      import_id: importId,
-      mirakl_status: status.status,
-      sync_status: finalStatus,
-      success: status.lines_in_success,
-      errors: status.lines_in_error,
-      promoted_inv: successInvIds.length,
-      rolled_back_inv: rolledBack,
-    });
   }
 
   return NextResponse.json({

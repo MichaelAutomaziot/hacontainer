@@ -26,7 +26,7 @@ const fmt = new Intl.NumberFormat("he-IL");
 const fmtCurr = (n: number | null | undefined) => n == null ? "—" : `₪${fmt.format(n)}`;
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
-const STATUSES = ["approved_for_pilot", "transformed", "uploading", "uploaded", "ran_approved"] as const;
+const STATUSES = ["approved_for_pilot", "transformed", "pending_catalog", "catalog_synced", "uploading", "uploaded", "ran_approved"] as const;
 
 export default function PilotPage() {
   const [statusFilter, setStatusFilter] = useState<string>("approved_for_pilot");
