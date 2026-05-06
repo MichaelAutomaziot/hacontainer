@@ -1,120 +1,30 @@
-// Resilient launcher for Next.js standalone bundle.
+// Minimal launcher for the Next.js standalone bundle on Railway.
 //
-// Behaviour:
-//   1. Patch baked-in Supabase placeholder tokens with the real runtime values
-//      from the Railway service environment.
-//   2. NEVER exit on missing config or patch failure — log loudly and start
-//      server.js anyway. We want the container alive so Railway's TCP probe
-//      passes; auth-dependent routes will surface their own errors at runtime.
-//   3. Forward signals so SIGINT/SIGTERM cleanly stop the child server.
-import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
-import { dirname, extname, resolve } from "node:path";
+// Supabase URL/anon key are no longer baked into the build. They are now
+// injected into the HTML at request time by app/layout.tsx (server
+// component) which reads process.env. So this script just sets cwd and
+// spawns server.js with the inherited environment.
+import { dirname, resolve } from "node:path";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
-
-const SUPABASE_URL_TOKEN = "https://runtime-supabase-url.invalid";
-const SUPABASE_ANON_KEY_TOKEN = "runtime-supabase-anon-key";
-
-const TEXT_EXTENSIONS = new Set([".html", ".js", ".json", ".mjs", ".rsc", ".txt"]);
 
 const standaloneRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 process.chdir(standaloneRoot);
 
-console.log(`[start-standalone] cwd=${process.cwd()} node=${process.version}`);
-console.log(`[start-standalone] PORT=${process.env.PORT ?? "(unset)"} HOSTNAME=${process.env.HOSTNAME ?? "(unset)"}`);
+console.log(
+  `[start-standalone] cwd=${process.cwd()} node=${process.version} ` +
+    `PORT=${process.env.PORT ?? "(unset)"} HOSTNAME=${process.env.HOSTNAME ?? "(unset)"}`,
+);
 
-function readFirstEnv(names) {
-  for (const name of names) {
-    const value = process.env[name]?.trim();
-    if (value) return value;
-  }
-  return "";
-}
-
-const supabaseUrl = readFirstEnv([
-  "NEXT_PUBLIC_SUPABASE_URL",
-  "CLIENT_SUPABASE_URL",
-  "SUPABASE_URL",
-]);
-
-const supabaseAnonKey = readFirstEnv([
-  "NEXT_PUBLIC_SUPABASE_ANON_KEY",
-  "SUPABASE_ANON_KEY",
-  "CLIENT_SUPABASE_ANON_KEY",
-  "CLIENT_SUPABASE_KEY",
-]);
-
-const supabaseConfigured = /^https?:\/\//.test(supabaseUrl) && Boolean(supabaseAnonKey);
-
-if (!supabaseConfigured) {
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? process.env.SUPABASE_URL ?? "";
+if (!/^https?:\/\//.test(supabaseUrl)) {
   console.warn(
-    "[start-standalone] WARNING: NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY missing. " +
-      "Server will start but Supabase-backed routes will fail until env vars are set on the Railway service.",
+    "[start-standalone] WARNING: NEXT_PUBLIC_SUPABASE_URL is not set on the Railway service. " +
+      "Server will start, but Supabase-backed routes (login, catalog, sync) will fail until set.",
   );
 }
 
-function replaceTokensInFile(filePath) {
-  try {
-    const ext = extname(filePath);
-    if (ext && !TEXT_EXTENSIONS.has(ext)) return 0;
-
-    const content = readFileSync(filePath, "utf8");
-    if (!content.includes(SUPABASE_URL_TOKEN) && !content.includes(SUPABASE_ANON_KEY_TOKEN)) {
-      return 0;
-    }
-
-    const patched = content
-      .split(SUPABASE_URL_TOKEN)
-      .join(supabaseUrl || SUPABASE_URL_TOKEN)
-      .split(SUPABASE_ANON_KEY_TOKEN)
-      .join(supabaseAnonKey || SUPABASE_ANON_KEY_TOKEN);
-
-    if (patched === content) return 0;
-
-    writeFileSync(filePath, patched);
-    return 1;
-  } catch (err) {
-    console.warn(`[start-standalone] patch skip ${filePath}: ${err?.message ?? err}`);
-    return 0;
-  }
-}
-
-function replaceTokens(targetPath) {
-  try {
-    if (!existsSync(targetPath)) return 0;
-    const stats = statSync(targetPath);
-    if (stats.isFile()) return replaceTokensInFile(targetPath);
-    if (!stats.isDirectory()) return 0;
-
-    let changed = 0;
-    for (const entry of readdirSync(targetPath)) {
-      if (entry === "node_modules") continue;
-      changed += replaceTokens(resolve(targetPath, entry));
-    }
-    return changed;
-  } catch (err) {
-    console.warn(`[start-standalone] traverse skip ${targetPath}: ${err?.message ?? err}`);
-    return 0;
-  }
-}
-
-if (supabaseConfigured) {
-  try {
-    const changedFiles = replaceTokens(resolve(".next")) + replaceTokens(resolve("server.js"));
-    console.log(`[start-standalone] runtime Supabase config applied to ${changedFiles} built file(s).`);
-  } catch (err) {
-    console.warn(`[start-standalone] token replacement failed: ${err?.message ?? err}`);
-  }
-} else {
-  console.warn("[start-standalone] skipping token patch — env not configured");
-}
-
-if (process.env.PATCH_RUNTIME_ENV_ONLY === "1") {
-  process.exit(0);
-}
-
 console.log("[start-standalone] launching server.js…");
-
 const server = spawn(process.execPath, ["server.js"], {
   stdio: "inherit",
   env: process.env,
@@ -126,9 +36,7 @@ server.on("error", (err) => {
 });
 
 for (const signal of ["SIGINT", "SIGTERM"]) {
-  process.on(signal, () => {
-    server.kill(signal);
-  });
+  process.on(signal, () => server.kill(signal));
 }
 
 server.on("exit", (code, signal) => {
