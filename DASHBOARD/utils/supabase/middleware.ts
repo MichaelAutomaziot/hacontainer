@@ -9,7 +9,7 @@ const PUBLIC_ROUTES = [
   "/auth/callback",
 ];
 
-const PUBLIC_API_ROUTES = ["/api/auth", "/api/public"];
+const PUBLIC_API_ROUTES = ["/api/auth", "/api/health", "/api/public"];
 
 function isPublicRoute(pathname: string): boolean {
   return PUBLIC_ROUTES.some((route) => pathname.startsWith(route));
