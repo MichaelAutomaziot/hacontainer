@@ -31,6 +31,7 @@ const STATUSES = ["approved_for_pilot", "transformed", "pending_catalog", "catal
 export default function PilotPage() {
   const [statusFilter, setStatusFilter] = useState<string>("approved_for_pilot");
   const [pushBusy, setPushBusy] = useState<boolean>(false);
+  const [pm01Busy, setPm01Busy] = useState<boolean>(false);
   const [transformBusyId, setTransformBusyId] = useState<number | null>(null);
   const { data, isFetching, refetch } = useList<Inv>({
     resource: "inventory",
@@ -118,6 +119,67 @@ export default function PilotPage() {
                 variant={statusFilter === s ? "filled" : "outlined"} />
         ))}
         <Box sx={{ flex: 1 }} />
+        <Tooltip title={pm01Busy ? "שולח PM01 לסופר-פארם…" : "צור מוצרים חדשים בקטלוג SP (PM01) — שלב חובה לפני העלאת הצעה (OF01)"}>
+          <span>
+            <Button
+              startIcon={<UploadIcon />}
+              variant="outlined"
+              color="primary"
+              sx={{ mr: 1 }}
+              disabled={pm01Busy || (counts.transformed ?? 0) === 0}
+              onClick={async () => {
+                if (pm01Busy) return;
+                const sendIds = rows
+                  .filter((r) => r.pilot_status === "transformed")
+                  .map((r) => r.id);
+                if (sendIds.length === 0) return;
+                setPm01Busy(true);
+                try {
+                  const res = await fetch("/api/sync/superpharm/products/push", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ mode: "by_ids", ids: sendIds }),
+                  });
+                  const json = (await res.json().catch(() => ({}))) as {
+                    ok?: boolean;
+                    import_id?: number;
+                    sync_job_id?: string | null;
+                    sku_count?: number;
+                    already_cataloged?: number;
+                    blocked_by_data?: number;
+                    blocked_by_brand?: number;
+                    rejected?: { sku: string; errors: string[] }[];
+                    unresolvable_brands?: { sku: string; brand: string }[];
+                    error?: string;
+                  };
+                  if (!res.ok || !json.ok) {
+                    const detail =
+                      json.unresolvable_brands && json.unresolvable_brands.length > 0
+                        ? `מותגים לא מזוהים: ${json.unresolvable_brands.map((b) => `${b.sku}=${b.brand}`).join(", ")}`
+                        : json.error ?? res.statusText;
+                    open?.({ type: "error", message: `PM01 נכשל: ${detail}` });
+                  } else {
+                    const parts = [
+                      `${json.sku_count ?? 0} מוצרים נשלחו ליצירה בקטלוג SP`,
+                      `import_id=${json.import_id}`,
+                    ];
+                    if ((json.already_cataloged ?? 0) > 0) parts.push(`${json.already_cataloged} כבר בקטלוג`);
+                    if ((json.blocked_by_data ?? 0) > 0) parts.push(`${json.blocked_by_data} חסרי מידע`);
+                    if ((json.blocked_by_brand ?? 0) > 0) parts.push(`${json.blocked_by_brand} מותג לא מזוהה`);
+                    open?.({ type: "success", message: parts.join(" · ") });
+                    refetch();
+                  }
+                } catch (e) {
+                  open?.({ type: "error", message: `שגיאת רשת: ${(e as Error).message}` });
+                } finally {
+                  setPm01Busy(false);
+                }
+              }}
+            >
+              {pm01Busy ? "שולח PM01…" : "צור בקטלוג (PM01)"}
+            </Button>
+          </span>
+        </Tooltip>
         <Tooltip title={pushBusy ? "שולח לסופר-פארם…" : "שלח את כל המוצרים בסטטוס approved_for_pilot או transformed"}>
           <span>
             <Button

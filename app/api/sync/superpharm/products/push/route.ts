@@ -338,6 +338,9 @@ export async function POST(req: Request) {
   }
 
   // sync_jobs row — type='superpharm_pm01'. /check route handles polling.
+  // The Mirakl upload already happened above; if the local DB insert fails we
+  // still need to surface the import_id so the user can recover, but we
+  // signal a non-ok response so callers don't claim success silently.
   const { data: jobRow, error: jobErr } = await sb
     .from("sync_jobs")
     .insert({
@@ -359,7 +362,18 @@ export async function POST(req: Request) {
     .select("id")
     .single();
   if (jobErr) {
-    console.warn(`[products/push] sync_jobs insert failed: ${jobErr.message}`);
+    console.error(`[products/push] sync_jobs insert failed: ${jobErr.message}`);
+    return NextResponse.json(
+      {
+        ok: false,
+        error: `Mirakl PM01 import_id=${importId} succeeded but sync_jobs insert failed: ${jobErr.message}`,
+        import_id: importId,
+        idempotency_key: idempotencyKey,
+        sku_count: accepted.length,
+        skus: accepted.map((a) => a.sku),
+      },
+      { status: 500 }
+    );
   }
 
   // Mark inventory so UI can show "in catalog sync" state.
