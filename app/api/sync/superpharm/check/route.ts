@@ -311,7 +311,8 @@ const reconcilePM01 = async (
   sb: ReturnType<typeof getServiceClient>,
   job: SyncJob,
   importId: number,
-  baseUrl: string
+  baseUrl: string,
+  chainCookie: string
 ): Promise<CheckSummary> => {
   const status = await fetchProductStatus(importId);
   if (!status) {
@@ -383,7 +384,7 @@ const reconcilePM01 = async (
     try {
       const res = await fetch(`${baseUrl}/api/sync/superpharm/push`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", cookie: chainCookie },
         body: JSON.stringify({
           mode: "by_ids",
           ids: successInvIds,
@@ -454,6 +455,9 @@ export async function POST(req: Request) {
       process.env.APP_BASE_URL?.replace(/\/$/, "") ??
       `${req.headers.get("x-forwarded-proto") ?? "http"}://${req.headers.get("host") ?? "localhost:3000"}`;
   }
+  // Forward the caller's auth cookie when chaining PM01 → OF01 via internal
+  // self-fetch; middleware otherwise 307s the request to /login.
+  const chainCookie = req.headers.get("cookie") ?? "";
 
   const { data: jobs, error: jobsErr } = await sb
     .from("sync_jobs")
@@ -486,7 +490,7 @@ export async function POST(req: Request) {
     }
     try {
       if (job.type === "superpharm_pm01") {
-        summary.push(await reconcilePM01(sb, job, importId, baseUrl));
+        summary.push(await reconcilePM01(sb, job, importId, baseUrl, chainCookie));
       } else {
         summary.push(await reconcileOF01(sb, job, importId));
       }

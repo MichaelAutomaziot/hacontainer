@@ -390,9 +390,13 @@ export async function POST(req: Request) {
   if (!dry && needsPm01.length > 0 && !chained) {
     try {
       const baseUrl = resolveBaseUrl(req);
+      // Forward the auth cookie so the middleware lets the internal fetch
+      // through. Without this it 307s to /login and /products/push never
+      // runs — leaving a stuck "no sync_job_id" error here.
+      const cookie = req.headers.get("cookie") ?? "";
       const r = await fetch(`${baseUrl}/api/sync/superpharm/products/push`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", cookie },
         body: JSON.stringify({ mode: "by_ids", ids: needsPm01.map((r) => r.id) }),
       });
       const j = (await r.json().catch(() => ({}))) as {
