@@ -147,9 +147,18 @@ const pickInventory = async (
 
   if (mode === "by_ids") {
     if (!opts.ids?.length) return [];
-    const { data, error } = await sb.from("inventory").select(INV_COLS).in("id", opts.ids);
-    if (error) throw new Error(`inventory: ${error.message}`);
-    return (data ?? []) as InvRow[];
+    // Chunk to keep the PostgREST URL under the proxy limit. With 4,000+
+    // ids the single .in() call produces a ~28KB URL and the request fails
+    // outright with "TypeError: fetch failed".
+    const out: InvRow[] = [];
+    const CHUNK = 500;
+    for (let i = 0; i < opts.ids.length; i += CHUNK) {
+      const slice = opts.ids.slice(i, i + CHUNK);
+      const { data, error } = await sb.from("inventory").select(INV_COLS).in("id", slice);
+      if (error) throw new Error(`inventory: ${error.message}`);
+      out.push(...((data ?? []) as InvRow[]));
+    }
+    return out;
   }
 
   // mode === "missing": all inventory ids tagged verdict='missing' in catalog_matches.
@@ -501,15 +510,21 @@ export const dispatchPm01 = async (
     };
   }
 
-  // Mark inventory so UI can show "in catalog sync" state.
+  // Mark inventory so UI can show "in catalog sync" state. Chunk to keep
+  // the PostgREST URL under the proxy limit (same reason as the by_ids
+  // SELECT above).
   const ids = accepted.map((a) => a.invId);
   if (ids.length > 0) {
-    const { error: psErr } = await sb
-      .from("inventory")
-      .update({ pilot_status: "pending_catalog" })
-      .in("id", ids);
-    if (psErr) {
-      console.warn(`[pm01-dispatch] pilot_status update failed: ${psErr.message}`);
+    const CHUNK = 500;
+    for (let i = 0; i < ids.length; i += CHUNK) {
+      const slice = ids.slice(i, i + CHUNK);
+      const { error: psErr } = await sb
+        .from("inventory")
+        .update({ pilot_status: "pending_catalog" })
+        .in("id", slice);
+      if (psErr) {
+        console.warn(`[pm01-dispatch] pilot_status update failed: ${psErr.message}`);
+      }
     }
   }
 

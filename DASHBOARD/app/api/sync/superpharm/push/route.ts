@@ -197,9 +197,18 @@ const pickInventory = async (
 
   if (mode === "by_ids") {
     if (!body.ids?.length) return [];
-    const { data, error } = await sb.from("inventory").select(INV_COLS).in("id", body.ids);
-    if (error) throw new Error(`inventory: ${error.message}`);
-    return (data ?? []) as InvRow[];
+    // Chunk to keep the PostgREST URL under the proxy limit. With 4,000+
+    // ids the single .in() call produces a ~28KB URL and the request fails
+    // outright with "TypeError: fetch failed".
+    const out: InvRow[] = [];
+    const CHUNK = 500;
+    for (let i = 0; i < body.ids.length; i += CHUNK) {
+      const slice = body.ids.slice(i, i + CHUNK);
+      const { data, error } = await sb.from("inventory").select(INV_COLS).in("id", slice);
+      if (error) throw new Error(`inventory: ${error.message}`);
+      out.push(...((data ?? []) as InvRow[]));
+    }
+    return out;
   }
 
   if (mode === "all_missing") {
@@ -691,12 +700,16 @@ export async function POST(req: Request) {
   // failure. This prevents false-positives like the MG5720 incident.
   const ids = accepted.map((a) => a.invId);
   if (ids.length > 0) {
-    const { error: psErr } = await sb
-      .from("inventory")
-      .update({ pilot_status: "uploading" })
-      .in("id", ids);
-    if (psErr) {
-      console.warn(`[sync/superpharm/push] pilot_status update failed: ${psErr.message}`);
+    const CHUNK = 500;
+    for (let i = 0; i < ids.length; i += CHUNK) {
+      const slice = ids.slice(i, i + CHUNK);
+      const { error: psErr } = await sb
+        .from("inventory")
+        .update({ pilot_status: "uploading" })
+        .in("id", slice);
+      if (psErr) {
+        console.warn(`[sync/superpharm/push] pilot_status update failed: ${psErr.message}`);
+      }
     }
   }
 
