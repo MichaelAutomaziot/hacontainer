@@ -482,6 +482,7 @@ export const hebrewTranslations = {
         imported: 'בקונטיינר בלבד',
       approved_for_pilot: 'מוכן להעלאה',
       transformed: 'הומר',
+      uploading: 'בהעלאה ל-Mirakl',
       uploaded: 'הועלה לסופר-פארם',
       exists_in_sp: 'קיים בסופר-פארם',
       ran_approved: 'אושר ע"י רן',

@@ -232,6 +232,42 @@ const fetchSpEanSet = async (
   return out;
 };
 
+/**
+ * Probe Mirakl /api/products to verify each EAN has a published product entry.
+ * Required pre-OF01 gate when import_type='official': SP rejects offers whose
+ * product is not in the catalog with "The state of the product is unknown".
+ * Returns the set of EANs that ARE present in the SP product catalog.
+ */
+const fetchSpCatalogedEans = async (eans: string[]): Promise<Set<string>> => {
+  const out = new Set<string>();
+  const base = process.env.MIRAKL_BASE_URL ?? "https://superpharm-prod.mirakl.net";
+  const key = process.env.MIRAKL_API_KEY ?? "";
+  if (!key || eans.length === 0) return out;
+  const CHUNK = 50;
+  for (let i = 0; i < eans.length; i += CHUNK) {
+    const slice = eans.slice(i, i + CHUNK);
+    const refs = slice.map((e) => `${e}|EAN`).join(",");
+    const url = `${base}/api/products?product_references=${encodeURIComponent(refs)}`;
+    try {
+      const res = await fetch(url, {
+        headers: { Authorization: key, Accept: "application/json" },
+      });
+      if (!res.ok) continue;
+      const json = (await res.json()) as {
+        products?: { product_references?: { reference?: string; type?: string }[] }[];
+      };
+      for (const p of json.products ?? []) {
+        for (const r of p.product_references ?? []) {
+          if (r.type === "EAN" && r.reference) out.add(r.reference.trim());
+        }
+      }
+    } catch {
+      // network blip — leave EAN unverified (will surface as Mirakl error post-push)
+    }
+  }
+  return out;
+};
+
 export async function POST(req: Request) {
   const sb = getServiceClient();
   const t0 = Date.now();
@@ -295,15 +331,43 @@ export async function POST(req: Request) {
     invRows = survivors;
   }
 
+  // 3b. Catalog gate: official imports require the EAN to already exist in SP's
+  // product catalog. Otherwise Mirakl rejects with "state of the product is
+  // unknown". Carve those rows off into a separate rejection bucket so callers
+  // can route them to a PM01 (product create) flow instead of OF01.
+  let blockedByCatalog: { sku: string; inv_id: number; errors: string[] }[] = [];
+  if (importType === "official" && invRows.length > 0) {
+    const eansToCheck = invRows
+      .map((r) => r.ean?.trim())
+      .filter((e): e is string => !!e);
+    const cataloged = await fetchSpCatalogedEans(eansToCheck);
+    const survivors: InvRow[] = [];
+    for (const r of invRows) {
+      if (r.ean && !cataloged.has(r.ean.trim())) {
+        blockedByCatalog.push({
+          sku: r.sku ?? `inv:${r.id}`,
+          inv_id: r.id,
+          errors: [
+            "EAN not in SP catalog — needs PM01 (product create) before OF01 with import_type=official",
+          ],
+        });
+      } else {
+        survivors.push(r);
+      }
+    }
+    invRows = survivors;
+  }
+
   if (invRows.length === 0) {
     return NextResponse.json(
       {
         ok: dry, // dry-run with zero candidates is a fine "nothing to do"
         eligible: 0,
         blocked_by_duplicate: blockedByDuplicate,
+        blocked_by_catalog: blockedByCatalog.length,
         blocked_by_priceFor: 0,
-        rejected: [],
-        ...(dry ? {} : { error: "no inventory rows match selection" }),
+        rejected: blockedByCatalog,
+        ...(dry ? {} : { error: "no inventory rows match selection (after catalog gate)" }),
       },
       { status: dry ? 200 : 400 }
     );
@@ -365,9 +429,10 @@ export async function POST(req: Request) {
       mode,
       eligible: accepted.length,
       blocked_by_duplicate: blockedByDuplicate,
+      blocked_by_catalog: blockedByCatalog.length,
       blocked_by_priceFor: rejected.length,
-      rejected,
-      total_candidates: invRows.length + blockedByDuplicate,
+      rejected: [...rejected, ...blockedByCatalog],
+      total_candidates: invRows.length + blockedByDuplicate + blockedByCatalog.length,
       elapsed_s: Number(((Date.now() - t0) / 1000).toFixed(2)),
     });
   }
@@ -376,10 +441,11 @@ export async function POST(req: Request) {
     return NextResponse.json(
       {
         ok: false,
-        error: `all ${invRows.length} payloads rejected pre-flight`,
+        error: `all ${invRows.length + blockedByCatalog.length} payloads rejected pre-flight`,
         blocked_by_duplicate: blockedByDuplicate,
+        blocked_by_catalog: blockedByCatalog.length,
         blocked_by_priceFor: rejected.length,
-        rejected,
+        rejected: [...rejected, ...blockedByCatalog],
       },
       { status: 422 }
     );
@@ -399,12 +465,14 @@ export async function POST(req: Request) {
     );
   }
 
-  // 7. sync_jobs row.
+  // 7. sync_jobs row. Status starts 'pending_mirakl' — only the /check route
+  // (after polling Mirakl) flips this to 'done' or 'failed'. Never 'running'
+  // forever (previous bug).
   const { data: jobRow, error: jobErr } = await sb
     .from("sync_jobs")
     .insert({
       type: "superpharm_of01",
-      status: "running",
+      status: "pending_mirakl",
       payload: {
         import_id: importId,
         idempotency_key: idempotencyKey,
@@ -412,8 +480,10 @@ export async function POST(req: Request) {
         sku_count: accepted.length,
         rejected_count: rejected.length,
         blocked_by_duplicate: blockedByDuplicate,
-        rejected,
+        blocked_by_catalog: blockedByCatalog.length,
+        rejected: [...rejected, ...blockedByCatalog],
         skus: accepted.map((a) => a.sku),
+        inv_ids: accepted.map((a) => a.invId),
         import_type: importType,
       },
     })
@@ -423,11 +493,12 @@ export async function POST(req: Request) {
     console.warn(`[sync/superpharm/push] sync_jobs insert failed: ${jobErr.message}`);
   }
 
-  // 8. channel_listings staging.
+  // 8. channel_listings staging. State 'submitted' = sent to Mirakl, awaiting
+  // import-status confirmation. /check route flips to 'pending'/'rejected'.
   const listings = accepted.map((a) => ({
     product_id: a.invId,
     channel: "superpharm" as const,
-    state: "pending",
+    state: "submitted",
     current_price: a.current_price,
     strike_price: a.strike_price,
     shipping_cost: a.shipping_cost,
@@ -442,12 +513,14 @@ export async function POST(req: Request) {
     console.warn(`[sync/superpharm/push] channel_listings upsert failed: ${clErr.message}`);
   }
 
-  // 9. Promote pilot_status so the queue advances.
+  // 9. Mark inventory.pilot_status='uploading' (NOT 'uploaded'). The /check
+  // route promotes to 'uploaded' on Mirakl success or rolls back to NULL on
+  // failure. This prevents false-positives like the MG5720 incident.
   const ids = accepted.map((a) => a.invId);
   if (ids.length > 0) {
     const { error: psErr } = await sb
       .from("inventory")
-      .update({ pilot_status: "uploaded" })
+      .update({ pilot_status: "uploading" })
       .in("id", ids);
     if (psErr) {
       console.warn(`[sync/superpharm/push] pilot_status update failed: ${psErr.message}`);
@@ -464,7 +537,9 @@ export async function POST(req: Request) {
     sku_count: accepted.length,
     rejected_count: rejected.length,
     blocked_by_duplicate: blockedByDuplicate,
-    rejected,
+    blocked_by_catalog: blockedByCatalog.length,
+    rejected: [...rejected, ...blockedByCatalog],
+    note: "Mirakl import submitted; status will resolve via POST /api/sync/superpharm/check",
     elapsed_s: elapsed,
   });
 }

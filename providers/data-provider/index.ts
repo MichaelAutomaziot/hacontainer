@@ -55,6 +55,64 @@ const isOrSearch = (m: unknown): m is OrSearchMeta =>
   Array.isArray((m as OrSearchMeta).fields) &&
   typeof (m as OrSearchMeta).value === "string";
 
+/** Translate a single Refine filter onto a PostgREST query builder. Used when
+ *  we need to bypass @refinedev/supabase's filter coercion (it serializes
+ *  `operator: 'null'` as `is.true` and unwrapped `not.in.x,y,z` inside `or()`,
+ *  both of which PostgREST rejects with "failed to parse logic tree"). */
+// PostgREST filter builder type is awkward to import — use any internally.
+// The runtime methods (.eq, .in, .is, .not, .ilike, .or, .order, .range)
+// are all standard on a PostgrestFilterBuilder.
+type AnyQuery = any; // eslint-disable-line @typescript-eslint/no-explicit-any
+const applyLeafFilter = (
+  q: AnyQuery,
+  field: string,
+  operator: string,
+  value: unknown,
+): AnyQuery => {
+  switch (operator) {
+    case "eq":   return q.eq(field, value as never);
+    case "ne":   return q.neq(field, value as never);
+    case "lt":   return q.lt(field, value as never);
+    case "lte":  return q.lte(field, value as never);
+    case "gt":   return q.gt(field, value as never);
+    case "gte":  return q.gte(field, value as never);
+    case "in":   return q.in(field, (value as unknown[]) ?? []);
+    case "nin":  return q.not(field, "in", `(${((value as unknown[]) ?? []).map((v) => `"${String(v).replace(/"/g, '""')}"`).join(",")})`);
+    case "null": return q.is(field, null);
+    case "nnull": return q.not(field, "is", null);
+    case "contains": return q.ilike(field, `%${escapeIlikeSqlPattern(String(value ?? ""))}%`);
+    default: return q;
+  }
+};
+
+/** Render a single leaf filter as a PostgREST `or(...)` argument fragment. */
+const renderOrLeaf = (field: string, operator: string, value: unknown): string => {
+  switch (operator) {
+    case "eq":   return `${field}.eq.${value}`;
+    case "ne":   return `${field}.neq.${value}`;
+    case "lt":   return `${field}.lt.${value}`;
+    case "lte":  return `${field}.lte.${value}`;
+    case "gt":   return `${field}.gt.${value}`;
+    case "gte":  return `${field}.gte.${value}`;
+    case "in":   return `${field}.in.(${((value as unknown[]) ?? []).join(",")})`;
+    case "nin":  return `${field}.not.in.(${((value as unknown[]) ?? []).join(",")})`;
+    case "null": return `${field}.is.null`;
+    case "nnull": return `${field}.not.is.null`;
+    default:     return `${field}.eq.${value}`;
+  }
+};
+
+const isLogicalOr = (
+  f: unknown,
+): f is { operator: "or" | "and"; value: { field: string; operator: string; value: unknown }[] } =>
+  !!f &&
+  typeof f === "object" &&
+  (f as { operator?: string }).operator !== undefined &&
+  ["or", "and"].includes((f as { operator: string }).operator) &&
+  Array.isArray((f as { value?: unknown }).value);
+
+const RAW_QUERY_RESOURCES = new Set(["v_comparison"]);
+
 export const dataProvider: DataProvider = {
   ...baseDataProvider,
   getList: async <TData extends BaseRecord = BaseRecord>(
@@ -67,6 +125,49 @@ export const dataProvider: DataProvider = {
       select:
         (meta as ListMeta | undefined)?.select ?? DEFAULT_SELECT[resource],
     };
+
+    // Resources that need correct nested or/null/nin handling go through the
+    // raw client. Refine's filter coercion mis-serializes these operators
+    // inside `or()`, producing PostgREST parse errors.
+    if (RAW_QUERY_RESOURCES.has(resource)) {
+      const { current = 1, pageSize = 25 } = pagination || {};
+      const fromRow = (current - 1) * pageSize;
+      const toRow = fromRow + pageSize - 1;
+      let query: AnyQuery = supabaseDataClient
+        .from(resource)
+        .select(fastMeta.select ?? "*", { count: fastMeta.count });
+
+      for (const f of filters ?? []) {
+        if (isLogicalOr(f)) {
+          type Leaf = { field: string; operator: string; value: unknown };
+          const leaves = f.value as unknown as Leaf[];
+          const arg = leaves
+            .map((leaf) => renderOrLeaf(leaf.field, leaf.operator, leaf.value))
+            .join(",");
+          if (f.operator === "or") {
+            query = query.or(arg);
+          } else {
+            for (const leaf of leaves) {
+              query = applyLeafFilter(query, leaf.field, leaf.operator, leaf.value);
+            }
+          }
+        } else {
+          const maybeLeaf = f as { field?: string; operator?: string; value?: unknown };
+          if (maybeLeaf.field && maybeLeaf.operator) {
+            query = applyLeafFilter(query, maybeLeaf.field, maybeLeaf.operator, maybeLeaf.value);
+          }
+        }
+      }
+
+      for (const s of sorters ?? []) {
+        query = query.order(s.field, { ascending: s.order === "asc" });
+      }
+      query = query.range(fromRow, toRow);
+
+      const { data, count, error } = await query;
+      if (error) throw error;
+      return { data: (data as unknown as TData[]) ?? [], total: count ?? 0 };
+    }
 
     const orSearchMeta = (fastMeta as { orSearch?: unknown } | undefined)?.orSearch;
     if (

@@ -78,7 +78,7 @@ export default function ComparisonPage() {
       operator: "or",
       value: [
         { field: "pilot_status", operator: "null", value: true },
-        { field: "pilot_status", operator: "nin",  value: ["approved_for_pilot", "transformed", "uploaded", "ran_approved"] },
+        { field: "pilot_status", operator: "nin",  value: ["approved_for_pilot", "transformed", "uploading", "uploaded", "ran_approved"] },
       ],
     });
     return f;
