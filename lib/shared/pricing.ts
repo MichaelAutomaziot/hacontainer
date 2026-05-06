@@ -1,14 +1,20 @@
 /**
  * Pricing engine — pure function. No I/O. No DB. No clock except via context.today.
  *
- * Implements the rules locked with the user on 2026-04-30:
- *   - Super-Pharm: base = HaContainer sale price + per-product pickup_cost.
- *   - Always add 39 ILS shipping (configurable via shipping_addon rule).
- *   - Strike (before-sale) price = current_price × 1.15 (configurable via strike_multiplier rule).
+ * Rules locked 2026-04-30 with the 2026-05-06 strike-multiplier adjustment from
+ * Ran (clarified 2026-05-06b: shipping is NOT rolled into current_price):
+ *   - current_price = HaContainer sale + per-product pickup_cost. Shipping is
+ *     NOT rolled in here — Mirakl charges shipping_cost separately so it must
+ *     not be double-counted in the displayed sale price.
+ *   - shipping_cost = 39 ILS always (configurable via shipping_addon rule).
+ *   - strike_price = (current_price + shipping_cost) × 1.15, rounded to whole
+ *     shekel. Multiplier deliberately applies to the POST-shipping figure so
+ *     the discount % shown on the SP listing reflects what the buyer actually
+ *     pays (sale + shipping vs. strike).
  *   - Discount window = [today, today + sale_duration.days].
- *   - skip_extras: labelled HaContainer shipping options never copied to Super-Pharm.
- *   - price_match: if a competitor offer is lower than the computed current_price,
- *     match it (still adding shipping_addon).
+ *   - skip_extras: labelled HaContainer shipping options never copied to SP.
+ *   - price_match: if competitor offer < ours, match the lowest then strike
+ *     recomputes off the new current + shipping.
  */
 import type {
   Channel,
@@ -54,7 +60,8 @@ export const priceFor = (
     errors.push(`pickup_cost is negative (${product.pickup_cost}) — refusing to compute price`);
   }
 
-  // 1) Base = sale price + per-product pickup cost.
+  // 1) current_price = HaContainer sale + per-product pickup. No shipping here
+  //    — shipping_cost carries the 39 ILS separately so Mirakl bills it once.
   let current = round2(product.base_price + (product.pickup_cost ?? 0));
 
   // 2) Price-match against competitors (if rule active).
@@ -76,17 +83,20 @@ export const priceFor = (
     }
   }
 
-  // 3) Always add shipping addon to current_price's *displayed* shipping
-  //    (Mirakl carries shipping in a separate field; current_price stays base).
+  // 3) Shipping addon — carried as its own field (39 ILS), NOT rolled into
+  //    current_price. Mirakl charges it on top at checkout.
   const shipCfg = ruleConfig<ShippingAddonConfig>(ctx.rules, "shipping_addon", ctx.channel);
   const shipping = shipCfg?.amount ?? 0;
   if (shipCfg) applied.push(`shipping_addon:${shipping}`);
 
-  // 4) Strike-through "before sale" price = current × multiplier.
+  // 4) Strike-through "before sale" price = (current + shipping) × multiplier.
+  //    Multiplier applies to the POST-shipping figure (Ran 2026-05-06): so
+  //    sale 100 + shipping 39 → strike 160 (139 × 1.15 → 159.85 → 160). The
+  //    saving the buyer sees on the SP listing reflects total-paid difference.
   const strikeCfg = ruleConfig<StrikeMultiplierConfig>(ctx.rules, "strike_multiplier", ctx.channel);
   let strike: number | null = null;
   if (strikeCfg) {
-    strike = roundEven(current * strikeCfg.factor);
+    strike = roundEven((current + shipping) * strikeCfg.factor);
     applied.push(`strike_multiplier:${strikeCfg.factor}`);
   }
 

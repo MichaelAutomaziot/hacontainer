@@ -24,12 +24,14 @@ type Inv = {
 
 const fmt = new Intl.NumberFormat("he-IL");
 const fmtCurr = (n: number | null | undefined) => n == null ? "—" : `₪${fmt.format(n)}`;
+const round2 = (n: number) => Math.round(n * 100) / 100;
 
 const STATUSES = ["approved_for_pilot", "transformed", "uploaded", "ran_approved"] as const;
 
 export default function PilotPage() {
   const [statusFilter, setStatusFilter] = useState<string>("approved_for_pilot");
   const [pushBusy, setPushBusy] = useState<boolean>(false);
+  const [transformBusyId, setTransformBusyId] = useState<number | null>(null);
   const { data, isFetching, refetch } = useList<Inv>({
     resource: "inventory",
     pagination: { pageSize: 200 },
@@ -50,6 +52,46 @@ export default function PilotPage() {
   const removeFromPilot = (id: number) => updateInv({ resource: "inventory", id, values: { pilot_status: "imported" } }, {
     onSuccess: () => { open?.({ type: "success", message: "הוסר מהפיילוט" }); refetch(); },
   });
+
+  const runTransform = async (id: number) => {
+    if (transformBusyId !== null) return;
+    setTransformBusyId(id);
+    try {
+      const res = await fetch("/api/sync/superpharm/push", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode: "by_ids", ids: [id], dry: true }),
+      });
+      const json = (await res.json().catch(() => ({}))) as {
+        ok?: boolean;
+        eligible?: number;
+        blocked_by_priceFor?: number;
+        rejected?: { sku: string; errors: string[] }[];
+        error?: string;
+      };
+      if (!res.ok || !json.ok || (json.eligible ?? 0) < 1) {
+        const reason =
+          json.rejected?.[0]?.errors?.filter(Boolean).join(", ") ||
+          json.error ||
+          ((json.blocked_by_priceFor ?? 0) > 0
+            ? "המוצר לא מוכן להפצה. בדוק שם, מחיר, ברקוד ותמונות."
+            : "לא נמצא מוצר מוכן להמרה.");
+        open?.({ type: "error", message: `המרה נכשלה: ${reason}` });
+        return;
+      }
+      updateInv(
+        { resource: "inventory", id, values: { pilot_status: "transformed" } },
+        {
+          onSuccess: () => { open?.({ type: "success", message: "המרה הושלמה" }); refetch(); },
+          onError: (e) => open?.({ type: "error", message: `עדכון סטטוס נכשל: ${(e as unknown as Error).message}` }),
+        }
+      );
+    } catch (e) {
+      open?.({ type: "error", message: `שגיאת רשת: ${(e as Error).message}` });
+    } finally {
+      setTransformBusyId(null);
+    }
+  };
 
   return (
     <PageFrame>
@@ -76,21 +118,25 @@ export default function PilotPage() {
                 variant={statusFilter === s ? "filled" : "outlined"} />
         ))}
         <Box sx={{ flex: 1 }} />
-        <Tooltip title={pushBusy ? "שולח לסופר-פארם…" : "שלח את כל המוצרים בסטטוס approved_for_pilot"}>
+        <Tooltip title={pushBusy ? "שולח לסופר-פארם…" : "שלח את כל המוצרים בסטטוס approved_for_pilot או transformed"}>
           <span>
             <Button
               startIcon={<UploadIcon />}
               variant="contained"
               color="success"
-              disabled={pushBusy || (counts.approved_for_pilot ?? 0) === 0}
+              disabled={pushBusy || ((counts.approved_for_pilot ?? 0) + (counts.transformed ?? 0)) === 0}
               onClick={async () => {
                 if (pushBusy) return;
+                const sendIds = rows
+                  .filter((r) => r.pilot_status === "approved_for_pilot" || r.pilot_status === "transformed")
+                  .map((r) => r.id);
+                if (sendIds.length === 0) return;
                 setPushBusy(true);
                 try {
                   const res = await fetch("/api/sync/superpharm/push", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ statusFilter: "approved_for_pilot" }),
+                    body: JSON.stringify({ mode: "by_ids", ids: sendIds }),
                   });
                   const json = (await res.json().catch(() => ({}))) as {
                     ok?: boolean;
@@ -151,20 +197,34 @@ export default function PilotPage() {
                 </Box>
               </Box>
               <CardContent sx={{ pt: 0, flex: 1 }}>
-                <Paper variant="outlined" sx={{ p: 1.5, bgcolor: "grey.50" }}>
-                  <Typography variant="overline" color="text.secondary">תצוגה מקדימה של OF01</Typography>
-                  <Stack spacing={0.3} sx={{ mt: 0.5 }}>
-                    <Typography variant="body2"><b>{t.pilot.columns.currentPrice}:</b> {fmtCurr((p.price ?? 0) + (p.pickup_cost ?? 0))}</Typography>
-                    <Typography variant="body2"><b>{t.pilot.columns.strikePrice}:</b> {fmtCurr(Math.round(((p.price ?? 0) + (p.pickup_cost ?? 0)) * 1.15))}</Typography>
-                    <Typography variant="body2"><b>{t.pilot.columns.shippingCost}:</b> ₪39</Typography>
-                    <Typography variant="body2" color="text.secondary">המרה לא הופעלה — לחץ "{t.pilot.actions.runTransform}" לטרנספורם מלא</Typography>
-                  </Stack>
-                </Paper>
+                <Stack direction={{ xs: "column", md: "row" }} spacing={1.5}>
+                  <Paper variant="outlined" sx={{ p: 1.5, flex: 1, bgcolor: "grey.50" }}>
+                    <Typography variant="overline" color="text.secondary">לפני המרה (הקונטיינר)</Typography>
+                    <Stack spacing={0.3} sx={{ mt: 0.5 }}>
+                      <Typography variant="body2"><b>מחיר מבצע:</b> {fmtCurr(p.price ?? 0)}</Typography>
+                      <Typography variant="body2"><b>עלות איסוף:</b> {fmtCurr(p.pickup_cost ?? 0)}</Typography>
+                    </Stack>
+                  </Paper>
+                  <Paper variant="outlined" sx={{ p: 1.5, flex: 1, bgcolor: "success.50" }}>
+                    <Typography variant="overline" color="success.main">אחרי המרה (סופר-פארם)</Typography>
+                    <Stack spacing={0.3} sx={{ mt: 0.5 }}>
+                      <Typography variant="body2"><b>{t.pilot.columns.currentPrice}:</b> {fmtCurr(round2((p.price ?? 0) + (p.pickup_cost ?? 0)))}</Typography>
+                      <Typography variant="body2"><b>{t.pilot.columns.strikePrice}:</b> {fmtCurr(Math.round(((p.price ?? 0) + (p.pickup_cost ?? 0) + 39) * 1.15))}</Typography>
+                      <Typography variant="body2"><b>{t.pilot.columns.shippingCost}:</b> ₪39</Typography>
+                    </Stack>
+                  </Paper>
+                </Stack>
               </CardContent>
               <CardActions sx={{ px: 2, pb: 2, justifyContent: "space-between" }}>
                 <Stack direction="row" spacing={1}>
-                  <Button size="small" startIcon={<TransformIcon />} variant="contained" disabled>
-                    {t.pilot.actions.runTransform}
+                  <Button
+                    size="small"
+                    startIcon={<TransformIcon />}
+                    variant="contained"
+                    disabled={transformBusyId !== null || p.pilot_status !== "approved_for_pilot"}
+                    onClick={() => runTransform(p.id)}
+                  >
+                    {transformBusyId === p.id ? "מעבד…" : t.pilot.actions.runTransform}
                   </Button>
                   <Tooltip title={t.pilot.actions.openInHaContainer}>
                     <span>

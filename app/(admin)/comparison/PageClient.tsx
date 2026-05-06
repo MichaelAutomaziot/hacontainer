@@ -62,13 +62,25 @@ export default function ComparisonPage() {
   const [drawer, setDrawer] = useState<Row | null>(null);
 
   const filters = useMemo(() => {
-    const f: Array<{ field: string; operator: string; value: unknown }> = [];
+    type Logical = { field: string; operator: string; value: unknown };
+    type Cond = { operator: "or" | "and"; value: Logical[] };
+    const f: Array<Logical | Cond> = [];
     if (verdict)  f.push({ field: "verdict",      operator: "eq",       value: verdict });
     if (brand)    f.push({ field: "inv_brand",    operator: "eq",       value: brand });
     if (category) f.push({ field: "inv_category", operator: "eq",       value: category });
     if (deferredSearch) f.push({ field: "name_he", operator: "contains", value: deferredSearch });
     if (hasEan === "yes") f.push({ field: "inv_ean", operator: "nnull", value: true });
     if (hasEan === "no")  f.push({ field: "inv_ean", operator: "null",  value: true });
+    // Hide rows already moved to the upload queue. NULL pilot_status (untouched
+    // rows) must still pass — PostgREST `not.in` excludes NULL by SQL semantics,
+    // so wrap in an OR with an explicit null branch.
+    f.push({
+      operator: "or",
+      value: [
+        { field: "pilot_status", operator: "null", value: true },
+        { field: "pilot_status", operator: "nin",  value: ["approved_for_pilot", "transformed", "uploaded", "ran_approved"] },
+      ],
+    });
     return f;
   }, [verdict, brand, category, deferredSearch, hasEan]);
 

@@ -91,13 +91,17 @@ export const buildOf01Csv = (rows: OF01Row[]): string => {
   return [COLS.join(","), ...rows.map(toRow)].join("\n") + "\n";
 };
 
-/** Choose SP logistic class given the source product's pickup-cost + size hint. */
+/** Choose SP logistic class given the source product's pickup-cost + size hint.
+ *  Pilot rule (PILOT.md, locked 2026-04-30): shipping is ALWAYS 39 ILS, billed
+ *  by SP via min-shipping-price. We must NOT return MPFreeShipping — that
+ *  logistic class instructs SP to charge 0 regardless of min-shipping-price,
+ *  which would suppress the 39 we set. pickup_cost=0 just means we don't pay
+ *  HaContainer pickup; the buyer still pays SP shipping. */
 export const pickLogisticClass = (opts: {
   pickup_cost: number;
   category_label?: string | null;
   base_price: number;
 }): LogisticClass => {
-  if (opts.pickup_cost === 0) return "MPFreeShipping";
   const cat = opts.category_label?.toLowerCase() ?? "";
   const largeKeywords = ["מקרר", "מקפיא", "כביסה", "מייבש", "מדיח", "תנור", "דוד", "ספה", "ארון", "מיטה"];
   if (opts.pickup_cost >= 100 || largeKeywords.some((k) => cat.includes(k))) return "MPLarge";

@@ -21,12 +21,14 @@
 
 | Rule | Value | Source |
 |---|---|---|
-| `current_price` | HaContainer sale price + per-product `pickup_cost` | call 28 Apr |
-| `shipping_cost` | **39 ILS** always | call 28 Apr |
-| `strike_price` | `current_price × 1.15`, rounded to whole shekel | call 28 Apr |
+| `current_price` | HaContainer sale price + per-product `pickup_cost`. Shipping NOT rolled in. | call 28 Apr |
+| `shipping_cost` | **39 ILS** always (separate field, charged on top by Mirakl) | call 28 Apr |
+| `strike_price` | `(current_price + shipping_cost) × 1.15`, rounded to whole shekel — multiplier applies POST-shipping so the listed discount reflects total-paid delta | adjusted 6 May 2026 |
 | Discount window | upload date → upload date + 30 days | call 28 Apr |
 | Skip extras | express, distant_area, kibbutz, above_2nd_floor | call 28 Apr |
-| Price match | If competitor offer < ours, match lowest (still + 39 ILS shipping) | call 28 Apr (Yossi suggestion confirmed by Ran) |
+| Price match | If competitor offer < ours, match lowest; strike re-computes off matched current + 39 | call 28 Apr (Yossi suggestion confirmed by Ran) |
+
+Worked example: HaContainer sale 100 ILS, pickup 0 → `current_price` = 100, `shipping_cost` = 39, `strike_price` = round(139 × 1.15) = 160. Buyer at SP checkout pays 100 + 39 = 139; listed discount vs. strike 160 is 21 ILS.
 
 ## What ships in D2 hub MVP (in scope by 12 May)
 
@@ -56,3 +58,4 @@ See plan file at `~/.claude/plans/c-users-downloads-ran-supabase-client-s-inheri
 | 2026-04-30 | Reuse existing `inventory` table as master product table; sidecar new tables | scaffold note |
 | 2026-04-30 | DB schema migration `add_product_hub_schema` applied | Supabase MCP |
 | 2026-04-30 | Pricing-rule seed `seed_superpharm_pricing_rules` blocked pending user OK | sandbox denial |
+| 2026-05-06 | Strike multiplier now applies to post-shipping figure: `strike = (current + 39) × 1.15`. `current_price` stays at sale + pickup (NO shipping roll-in — Mirakl bills shipping_cost separately, double-count avoided). | Ran request |

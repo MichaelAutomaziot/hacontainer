@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import dynamic from "next/dynamic";
 import {
   Alert,
   Box,
@@ -26,21 +27,23 @@ import {
   Sync as SyncIcon,
   TrendingUp as TrendIcon,
 } from "@mui/icons-material";
-import {
-  Bar,
-  BarChart,
-  Cell,
-  Pie,
-  PieChart,
-  RadialBar,
-  RadialBarChart,
-  ResponsiveContainer,
-  Tooltip as RTooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
 import { KpiCard, PageFrame } from "@/components/shared";
 import { hebrewTranslations as t } from "@/locales/he";
+
+const ChartFallback = () => <Skeleton variant="rounded" height={356} sx={{ minHeight: 356 }} />;
+
+const VerdictPiePanel = dynamic(
+  () => import("./DashboardCharts").then((m) => m.VerdictPiePanel),
+  { ssr: false, loading: ChartFallback }
+);
+const TopMissingPanel = dynamic(
+  () => import("./DashboardCharts").then((m) => m.TopMissingPanel),
+  { ssr: false, loading: ChartFallback }
+);
+const LogisticRadialPanel = dynamic(
+  () => import("./DashboardCharts").then((m) => m.LogisticRadialPanel),
+  { ssr: false, loading: ChartFallback }
+);
 
 interface SummaryData {
   inventory_total?: number;
@@ -53,15 +56,6 @@ interface SummaryData {
   sp_matched_unique?: number;
   sp_duplicate_unique?: number;
 }
-
-const VERDICT_COLORS: Record<string, string> = {
-  missing: "#bd3f32",
-  duplicate: "#2f7d4f",
-  candidate: "#c77912",
-  manual_review: "#2f6ea5",
-};
-
-const LOGISTIC_COLORS = ["#006d77", "#b85c38", "#2f7d4f", "#c77912", "#2f6ea5", "#6b5b95"];
 
 const fmt = new Intl.NumberFormat("he-IL");
 
@@ -84,30 +78,6 @@ const syncLabel = (type: string) => {
   };
   return labels[type] ?? type;
 };
-
-const ChartPanel = ({
-  title,
-  kicker,
-  children,
-}: {
-  title: string;
-  kicker?: string;
-  children: React.ReactNode;
-}) => (
-  <Paper sx={{ p: 2.2, height: "100%", minHeight: 356, overflow: "hidden" }}>
-    <Stack direction="row" justifyContent="space-between" alignItems="flex-start" sx={{ mb: 1.5 }}>
-      <Box>
-        <Typography variant="subtitle1">{title}</Typography>
-        {kicker && (
-          <Typography variant="caption" color="text.secondary">
-            {kicker}
-          </Typography>
-        )}
-      </Box>
-    </Stack>
-    {children}
-  </Paper>
-);
 
 export default function DashboardPage() {
   const theme = useTheme();
@@ -165,10 +135,18 @@ export default function DashboardPage() {
     [verdicts]
   );
 
-  const topMissing = (data?.top_missing_categories ?? []).slice(0, 10);
-  const logisticData = Object.entries(data?.sp_logistic_class ?? {})
-    .map(([name, value]) => ({ name, value }))
-    .sort((a, b) => b.value - a.value);
+  const topMissing = useMemo(
+    () => (data?.top_missing_categories ?? []).slice(0, 10),
+    [data?.top_missing_categories]
+  );
+
+  const logisticData = useMemo(
+    () =>
+      Object.entries(data?.sp_logistic_class ?? {})
+        .map(([name, value]) => ({ name, value }))
+        .sort((a, b) => b.value - a.value),
+    [data?.sp_logistic_class]
+  );
 
   const primarySync = lastSyncs["sync-konimbo-orphans"];
   const superPharmSync = lastSyncs["sync-superpharm-full"] ?? lastSyncs["sync-superpharm-orphans"];
@@ -312,81 +290,15 @@ export default function DashboardPage() {
 
       <Grid container spacing={2}>
         <Grid item xs={12} lg={4}>
-          <ChartPanel title={t.pilot.dashboard.verdictDistribution} kicker={`${fmt.format(totalVerdicts)} רשומות התאמה`}>
-            {loading ? (
-              <Skeleton variant="rounded" height={280} />
-            ) : verdictPie.length === 0 ? (
-              <EmptyState />
-            ) : (
-              <ResponsiveContainer width="100%" height={282}>
-                <PieChart>
-                  <Pie
-                    data={verdictPie}
-                    dataKey="value"
-                    nameKey="name"
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={64}
-                    outerRadius={104}
-                    paddingAngle={3}
-                    labelLine={false}
-                    label={({ name, percent }) => `${name} ${Math.round(percent * 100)}%`}
-                  >
-                    {verdictPie.map((entry) => (
-                      <Cell key={entry.key} fill={VERDICT_COLORS[entry.key] ?? theme.palette.grey[500]} />
-                    ))}
-                  </Pie>
-                  <RTooltip formatter={(value: number) => fmt.format(value)} />
-                </PieChart>
-              </ResponsiveContainer>
-            )}
-          </ChartPanel>
+          <VerdictPiePanel data={verdictPie} totalVerdicts={totalVerdicts} loading={loading} />
         </Grid>
 
         <Grid item xs={12} lg={5}>
-          <ChartPanel title={t.pilot.dashboard.topMissingCategories} kicker="עד 10 קטגוריות">
-            {loading ? (
-              <Skeleton variant="rounded" height={280} />
-            ) : topMissing.length === 0 ? (
-              <EmptyState />
-            ) : (
-              <ResponsiveContainer width="100%" height={282}>
-                <BarChart data={topMissing} layout="vertical" margin={{ left: 18, right: 18, top: 8, bottom: 8 }}>
-                  <XAxis type="number" reversed tick={{ fontSize: 12, fill: theme.palette.text.secondary }} />
-                  <YAxis
-                    type="category"
-                    dataKey="category"
-                    width={158}
-                    orientation="right"
-                    tick={{ fontSize: 12, fill: theme.palette.text.secondary }}
-                  />
-                  <RTooltip formatter={(value: number) => fmt.format(value)} />
-                  <Bar dataKey="n" fill={theme.palette.error.main} radius={[7, 7, 7, 7]} barSize={18} />
-                </BarChart>
-              </ResponsiveContainer>
-            )}
-          </ChartPanel>
+          <TopMissingPanel data={topMissing} loading={loading} />
         </Grid>
 
         <Grid item xs={12} lg={3}>
-          <ChartPanel title={t.pilot.dashboard.logisticClassDistribution} kicker="Super-Pharm">
-            {loading ? (
-              <Skeleton variant="rounded" height={280} />
-            ) : logisticData.length === 0 ? (
-              <EmptyState />
-            ) : (
-              <ResponsiveContainer width="100%" height={282}>
-                <RadialBarChart data={logisticData} innerRadius="24%" outerRadius="96%" startAngle={90} endAngle={-270}>
-                  <RadialBar dataKey="value" background={{ fill: alpha(theme.palette.text.primary, 0.08) }}>
-                    {logisticData.map((_, i) => (
-                      <Cell key={i} fill={LOGISTIC_COLORS[i % LOGISTIC_COLORS.length]} />
-                    ))}
-                  </RadialBar>
-                  <RTooltip formatter={(value: number) => fmt.format(value)} />
-                </RadialBarChart>
-              </ResponsiveContainer>
-            )}
-          </ChartPanel>
+          <LogisticRadialPanel data={logisticData} loading={loading} />
         </Grid>
 
         <Grid item xs={12}>
@@ -426,19 +338,3 @@ export default function DashboardPage() {
     </PageFrame>
   );
 }
-
-const EmptyState = () => (
-  <Box
-    sx={{
-      height: 282,
-      display: "grid",
-      placeItems: "center",
-      color: "text.secondary",
-      border: "1px dashed rgba(29, 37, 35, 0.18)",
-      borderRadius: 2,
-      bgcolor: "rgba(255,255,255,0.42)",
-    }}
-  >
-    <Typography variant="body2">{t.pilot.sync.noJobs}</Typography>
-  </Box>
-);

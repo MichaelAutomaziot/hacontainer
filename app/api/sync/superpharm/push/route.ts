@@ -93,15 +93,17 @@ const uploadCsv = async (
   const base = process.env.MIRAKL_BASE_URL ?? "https://superpharm-prod.mirakl.net";
   const key = process.env.MIRAKL_API_KEY ?? "";
   if (!key) throw new Error("MIRAKL_API_KEY not set");
-  const target = `${base}/api/offers/imports`;
+  // import_mode: NORMAL = insert + update existing offers (Mirakl OF01 default).
+  const importMode = process.env.MIRAKL_IMPORT_MODE ?? "NORMAL";
+  const target = `${base}/api/offers/imports?import_mode=${encodeURIComponent(importMode)}`;
 
-  const boundary = `----RanFainaHubPush${Date.now().toString(36)}`;
-  const body =
-    `--${boundary}\r\n` +
-    `Content-Disposition: form-data; name="file"; filename="offers.csv"\r\n` +
-    `Content-Type: text/csv; charset=utf-8\r\n\r\n` +
-    csv +
-    `\r\n--${boundary}--\r\n`;
+  const form = new FormData();
+  form.append("import_mode", importMode);
+  form.append(
+    "file",
+    new Blob([csv], { type: "text/csv; charset=utf-8" }),
+    "offers.csv"
+  );
 
   for (let attempt = 0; attempt < 4; attempt++) {
     const res = await fetch(target, {
@@ -109,10 +111,9 @@ const uploadCsv = async (
       headers: {
         Authorization: key,
         Accept: "application/json",
-        "Content-Type": `multipart/form-data; boundary=${boundary}`,
         "Idempotency-Key": idempotencyKey,
       },
-      body,
+      body: form,
     });
     if (res.status === 429 && attempt < 3) {
       const ra = Number(res.headers.get("retry-after") ?? 5);
@@ -365,6 +366,7 @@ export async function POST(req: Request) {
       eligible: accepted.length,
       blocked_by_duplicate: blockedByDuplicate,
       blocked_by_priceFor: rejected.length,
+      rejected,
       total_candidates: invRows.length + blockedByDuplicate,
       elapsed_s: Number(((Date.now() - t0) / 1000).toFixed(2)),
     });
