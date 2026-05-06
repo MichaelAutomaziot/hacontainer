@@ -415,8 +415,13 @@ export async function POST(req: Request) {
   // PM01 dispatch.
   //
   // Skip the gate on dry-run calls (transform readiness check).
+  // The needs-PM01 partition runs in BOTH dry and real modes — the dry run
+  // needs it so the UI can report `needs_pm01_count` and enable the upload
+  // button when all selected rows still need catalog creation. (Without this
+  // the OF01-eligible count is 0 for any first-time push, and the button
+  // disables despite there being work to do.)
   const needsPm01: InvRow[] = [];
-  if (importType === "official" && invRows.length > 0 && !dry) {
+  if (importType === "official" && invRows.length > 0) {
     const eansToCheck = invRows
       .map((r) => r.ean?.trim())
       .filter((e): e is string => !!e);
@@ -583,13 +588,17 @@ export async function POST(req: Request) {
       ok: true,
       mode,
       eligible: accepted.length,
+      // Surface the needs-PM01 count so the UI can enable the upload button
+      // when the only "work to do" is catalog creation. Without this, the
+      // first-time bulk push always shows eligible=0 and the button is dead.
+      needs_pm01_count: needsPm01.length,
       blocked_by_duplicate: blockedByDuplicate,
       blocked_by_catalog: blockedByCatalog.length,
       blocked_by_priceFor: rejected.length,
       rejected: [...rejected, ...blockedByCatalog],
       pm01_dispatched_count: pm01DispatchedCount,
       pm01_sync_job_id: pm01DispatchedJobId,
-      total_candidates: invRows.length + blockedByDuplicate + blockedByCatalog.length,
+      total_candidates: invRows.length + blockedByDuplicate + blockedByCatalog.length + needsPm01.length,
       elapsed_s: Number(((Date.now() - t0) / 1000).toFixed(2)),
     });
   }
