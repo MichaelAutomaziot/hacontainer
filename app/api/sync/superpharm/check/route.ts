@@ -442,8 +442,18 @@ export async function POST(req: Request) {
   const t0 = Date.now();
 
   // Resolve own origin so PM01 → OF01 chain hits the same deployment.
-  const reqUrl = new URL(req.url);
-  const baseUrl = `${reqUrl.protocol}//${reqUrl.host}`;
+  let baseUrl: string;
+  try {
+    const u = new URL(req.url);
+    baseUrl = u.host
+      ? `${u.protocol}//${u.host}`
+      : process.env.APP_BASE_URL?.replace(/\/$/, "") ??
+        `${req.headers.get("x-forwarded-proto") ?? "http"}://${req.headers.get("host") ?? "localhost:3000"}`;
+  } catch {
+    baseUrl =
+      process.env.APP_BASE_URL?.replace(/\/$/, "") ??
+      `${req.headers.get("x-forwarded-proto") ?? "http"}://${req.headers.get("host") ?? "localhost:3000"}`;
+  }
 
   const { data: jobs, error: jobsErr } = await sb
     .from("sync_jobs")

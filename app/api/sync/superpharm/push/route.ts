@@ -66,6 +66,25 @@ const INV_COLS =
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+/** Resolve an absolute origin for self-fetches (PM01 chain). Tries req.url
+ *  (works in production-like envs), then APP_BASE_URL, then the Host header.
+ *  Necessary because new URL(req.url) in some Next.js dev setups receives a
+ *  relative path and throws. */
+const resolveBaseUrl = (req: Request): string => {
+  try {
+    const u = new URL(req.url);
+    if (u.host) return `${u.protocol}//${u.host}`;
+  } catch {
+    /* fall through */
+  }
+  const env = process.env.APP_BASE_URL;
+  if (env && /^https?:\/\//.test(env)) return env.replace(/\/$/, "");
+  const host = req.headers.get("host");
+  const proto = req.headers.get("x-forwarded-proto") ?? "http";
+  if (host) return `${proto}://${host}`;
+  return "http://localhost:3000";
+};
+
 const toSourceProduct = (inv: InvRow): SourceProduct => ({
   hacontainer_id: inv.hacontainer_id ?? `inv:${inv.id}`,
   hacontainer_url: inv.hacontainer_url ?? "",
@@ -370,22 +389,35 @@ export async function POST(req: Request) {
   let pm01DispatchError: string | null = null;
   if (!dry && needsPm01.length > 0 && !chained) {
     try {
-      const reqUrl = new URL(req.url);
-      const baseUrl = `${reqUrl.protocol}//${reqUrl.host}`;
+      const baseUrl = resolveBaseUrl(req);
       const r = await fetch(`${baseUrl}/api/sync/superpharm/products/push`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ mode: "by_ids", ids: needsPm01.map((r) => r.id) }),
       });
-      const j = (await r.json()) as { sync_job_id?: string; sku_count?: number; error?: string };
+      const j = (await r.json().catch(() => ({}))) as {
+        sync_job_id?: string;
+        sku_count?: number;
+        error?: string;
+        unresolvable_brands?: { sku: string; brand: string }[];
+        rejected?: { sku: string; errors: string[] }[];
+      };
       if (r.ok) {
         pm01DispatchedJobId = j.sync_job_id ?? null;
         pm01DispatchedCount = j.sku_count ?? 0;
+        if (!pm01DispatchedJobId) {
+          pm01DispatchError = j.error ?? "PM01 dispatch returned no sync_job_id";
+        }
       } else {
-        pm01DispatchError = j.error ?? `HTTP ${r.status}`;
+        const detail =
+          j.error ??
+          (j.unresolvable_brands && j.unresolvable_brands.length > 0
+            ? `unresolvable brands: ${j.unresolvable_brands.map((b) => `${b.sku}=${b.brand}`).join(", ")}`
+            : `HTTP ${r.status}`);
+        pm01DispatchError = detail;
       }
     } catch (e) {
-      pm01DispatchError = (e as Error).message;
+      pm01DispatchError = `internal fetch failed: ${(e as Error).message}`;
     }
   }
   // Surface still-missing-from-catalog ids as a hard rejection ONLY on a
