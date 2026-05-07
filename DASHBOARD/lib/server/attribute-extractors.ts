@@ -47,22 +47,30 @@ const normalizeEnergyLetter = (raw: string | null): string | null => {
 
 /* ------------ individual extractors ------------ */
 
-/** 2054 — דירוג אנרגטי. Look for "דירוג אנרגטי A" / "אנרגטי B+" anywhere. */
+/** 2054 — דירוג אנרגטי. Real Container descriptions use multiple variants:
+ *    "דירוג אנרגטי A"   — exact, expected.
+ *    "דירוג אנגרטי A"   — typo, letter swap ר↔ג (inv:3622 confirmed).
+ *    "אנרגיה A"         — uses the noun "energy" (most products in the
+ *                          failed batch — inv:1716-1720, 633, 655, 657, …).
+ *    "Energy Class A"   — English fallback for imported listings.
+ *  Coverage on the 1,595-sample of failed-category products: strict regex
+ *  caught 26%; this broader variant catches 40%. */
 const energyRating: Extractor = (src) => {
   const text = corpus(src);
-  // Patterns ordered most-specific first.
+  // Match any energy-word variant followed by an A-G letter (with optional +).
+  // Word alternatives:
+  //   אנרגטי / אנגרטי(typo) / אנרגיה / אנרגית / energy
+  // Allow up to a small gap (":", "-", spaces) before the letter.
   const patterns = [
-    /דירוג\s*אנרגטי[:\s]+([A-G][\+]*)/i,
-    /אנרגטי[:\s]+([A-G][\+]*)/i,
-    /Energy\s*(?:Class|Rating)[:\s]+([A-G][\+]*)/i,
-    /\bClass\s+([A-G][\+]*)\b/i,
+    /(?:אנרגטי|אנגרטי|אנרגית|אנרגיה|energy(?:\s*class|\s*rating|\s*label)?)[:\s\-]*([A-G][\+]*)/i,
+    /\bclass\s+([A-G][\+]*)\b/i,
   ];
   for (const re of patterns) {
     const m = text.match(re);
     const letter = normalizeEnergyLetter(m?.[1] ?? null);
     if (letter) return letter;
   }
-  return "C"; // sensible mid-rating default.
+  return "C"; // Mirakl-acceptable default; SP merchandiser can override per product.
 };
 
 /** 2055 — תוקף דירוג אנרגטי. Free-text date; rare in HaContainer descriptions.
