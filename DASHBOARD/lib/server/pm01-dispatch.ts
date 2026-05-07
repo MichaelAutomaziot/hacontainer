@@ -27,6 +27,7 @@ import {
   type AttrSpec,
   type AttrSource,
 } from "@/lib/server/attribute-extractors";
+import { resolveSubTypeForProduct } from "@/lib/server/per-product-category-resolver";
 import { getServiceClient } from "@/utils/supabase/admin";
 
 const PAGE = 500;
@@ -448,6 +449,17 @@ export const dispatchPm01 = async (
       });
       continue;
     }
+
+    // Per-product sub-type resolver — picks a more specific SP leaf when
+    // the product name reveals a sub-type (e.g. "מקפיא עליון", "SBS",
+    // "פתח עליון") rather than uploading every refrigerator as the
+    // category default. Falls through to the default code when no rule
+    // matches, so this is strictly additive — never degrades the result.
+    categoryCode = resolveSubTypeForProduct(categoryCode, {
+      name_he: inv.name_he ?? "",
+      description_he: inv.description_he,
+    });
+
     // Build extra_attrs:
     //   1. Whatever numeric-keyed attrs are already in technical_specs (e.g.
     //      seller-supplied screen size).
