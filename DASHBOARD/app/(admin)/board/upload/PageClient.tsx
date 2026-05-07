@@ -183,11 +183,31 @@ export default function BoardUpload() {
       .filter((n) => Number.isFinite(n) && n > 0);
   }, [params]);
 
-  const [filter, setFilter] = useState<"all" | "ready" | "in_progress" | "done">("ready");
+  const [filter, setFilter] = useState<"all" | "ready" | "in_progress" | "done" | "last_failed">("ready");
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(0);
   const [channel, setChannel] = useState<ChannelKey>("superpharm");
   const [selection, setSelection] = useState<Set<number>>(() => new Set(initialIds));
+
+  /* --- 0) "last failed PM01" marker — set of inv ids the last big batch
+         couldn't validate (e.g. missing required attributes). Used by the
+         "כשלון בהעלאה האחרונה" filter so the operator can re-run only those. */
+  const { data: lastFailedIds } = useQuery<Set<number>>({
+    queryKey: ["board-upload-last-failed"],
+    staleTime: 60_000,
+    queryFn: async () => {
+      const { data } = await supabaseDataClient
+        .from("sync_jobs")
+        .select("payload")
+        .eq("type", "superpharm_pm01_failed_marker")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      const arr =
+        ((data?.payload as { failed_inv_ids?: number[] } | null)?.failed_inv_ids) ?? [];
+      return new Set(arr);
+    },
+  });
 
   /* --- 1) ready bucket: catalog_matches.verdict='missing' (paginated past
          PostgREST 1000-row cap via .range loop) --- */
@@ -317,6 +337,9 @@ export default function BoardUpload() {
       list = list.filter((r) => r.bucket === "queue" && r.pilot_status !== "approved_for_pilot" && r.pilot_status !== "transformed");
     } else if (filter === "done") {
       list = list.filter((r) => r.bucket === "done");
+    } else if (filter === "last_failed") {
+      const ids = lastFailedIds ?? new Set<number>();
+      list = list.filter((r) => ids.has(r.id));
     }
     if (search.trim()) {
       const q = search.trim().toLowerCase();
@@ -326,7 +349,7 @@ export default function BoardUpload() {
       });
     }
     return list;
-  }, [allRows, filter, search]);
+  }, [allRows, filter, search, lastFailedIds]);
 
   const pagedRows = useMemo(
     () => filteredRows.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE),
@@ -640,6 +663,17 @@ export default function BoardUpload() {
           variant={filter === "done" ? "filled" : "outlined"}
           sx={{ height: 32 }}
         />
+        {(lastFailedIds?.size ?? 0) > 0 && (
+          <Tooltip title="המוצרים מהבאצ' האחרון שנדחו ע״י Mirakl (חסר attribute חובה וכד'). העלה מחדש אחרי תיקון.">
+            <Chip
+              label={`כשלון בהעלאה האחרונה (${fmt.format(lastFailedIds!.size)})`}
+              onClick={() => setFilter("last_failed")}
+              color={filter === "last_failed" ? "error" : "default"}
+              variant={filter === "last_failed" ? "filled" : "outlined"}
+              sx={{ height: 32 }}
+            />
+          </Tooltip>
+        )}
       </Stack>
 
       {/* Action card */}
