@@ -53,6 +53,7 @@ import {
   type ValidationItem,
 } from "@/components/board";
 import { ImageThumb, SectionHeader, StatChip } from "@/components/shared";
+import Pm01ReadinessDrawer, { type ValidationRow } from "@/components/board/Pm01ReadinessDrawer";
 import { supabaseDataClient } from "@/utils/supabase/client";
 
 /* -----------------------  shared types  ----------------------- */
@@ -184,6 +185,36 @@ export default function BoardUpload() {
   }, [params]);
 
   const [filter, setFilter] = useState<"all" | "ready" | "in_progress" | "done" | "last_failed">("ready");
+
+  /** PM01 readiness drawer — open per-row to fix missing fields. */
+  const [readinessId, setReadinessId] = useState<number | null>(null);
+  const [readinessRow, setReadinessRow] = useState<ValidationRow | null>(null);
+  const [readinessLoading, setReadinessLoading] = useState(false);
+
+  const openReadiness = async (id: number) => {
+    setReadinessId(id);
+    setReadinessRow(null);
+    setReadinessLoading(true);
+    try {
+      const res = await fetch("/api/sync/superpharm/pm01/validate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: [id] }),
+      });
+      const j = (await res.json().catch(() => ({}))) as { rows?: ValidationRow[] };
+      setReadinessRow(j.rows?.[0] ?? null);
+    } finally {
+      setReadinessLoading(false);
+    }
+  };
+  const closeReadiness = () => {
+    setReadinessId(null);
+    setReadinessRow(null);
+  };
+  const onReadinessSaved = () => {
+    // Re-pull the lists so the row reflects the new values immediately.
+    refetch();
+  };
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(0);
   const [channel, setChannel] = useState<ChannelKey>("superpharm");
@@ -878,7 +909,17 @@ export default function BoardUpload() {
                 <CardContent sx={{ pt: 0, flex: 1 }}>
                   <PricingPreview product={{ base_price: p.price, pickup_cost: p.pickup_cost }} variant="strip" />
                 </CardContent>
-                <CardActions sx={{ px: 2, pb: 2, justifyContent: "flex-end" }}>
+                <CardActions sx={{ px: 2, pb: 2, justifyContent: "flex-end", gap: 1 }}>
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      openReadiness(p.id);
+                    }}
+                  >
+                    בדוק / השלם נתונים
+                  </Button>
                   <Tooltip title="הסר מתור ההעלאה">
                     <IconButton
                       size="small"
@@ -984,6 +1025,32 @@ export default function BoardUpload() {
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* Per-product PM01 readiness drawer — opened from the card actions. */}
+      <Pm01ReadinessDrawer
+        open={readinessId !== null}
+        invId={readinessId}
+        validation={readinessRow}
+        initial={(() => {
+          const r = allRows.find((x) => x.id === readinessId);
+          return {
+            name_he: r?.name_he ?? null,
+            brand: r?.brand ?? null,
+            ean: r?.ean ?? null,
+            images: r?.image ? [r.image] : null,
+          };
+        })()}
+        onClose={closeReadiness}
+        onSaved={onReadinessSaved}
+      />
+      {readinessLoading && readinessId !== null && (
+        /* Tiny inline loader near the page so the operator sees that we're
+         * fetching the validation for the row they just clicked. The drawer
+         * itself appears as soon as readinessRow lands. */
+        <Box sx={{ position: "fixed", top: 16, insetInlineEnd: 16, zIndex: 1500 }}>
+          <CircularProgress size={20} />
+        </Box>
+      )}
     </BoardShell>
   );
 }
