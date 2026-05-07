@@ -342,7 +342,7 @@ export default function ComparisonPage() {
       </FilterBar>
 
       {selection.length > 0 && (
-        <Paper sx={{ p: 1.5, borderColor: "primary.main", bgcolor: "rgba(193, 32, 38, 0.06)", boxShadow: "none" }}>
+        <Paper sx={{ p: 1.5, borderColor: "primary.main", bgcolor: "rgba(37, 99, 235, 0.06)", boxShadow: "none" }}>
           <Stack direction={{ xs: "column", md: "row" }} alignItems={{ md: "center" }} justifyContent="space-between" spacing={1.5}>
             <Typography sx={{ color: "text.primary", fontWeight: 850 }}>
               {t.pilot.review.bulkActionsLabel}: {selection.length} פריטים

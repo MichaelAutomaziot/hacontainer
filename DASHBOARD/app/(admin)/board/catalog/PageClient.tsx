@@ -3,21 +3,24 @@
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
+  Alert,
   Box,
   Button,
+  Card,
+  CardContent,
   Chip,
   IconButton,
   LinearProgress,
   MenuItem,
   Paper,
   Stack,
-  Tab,
-  Tabs,
   TextField,
   Tooltip,
   Typography,
+  alpha,
 } from "@mui/material";
 import {
+  Add as AddIcon,
   CheckCircle as MarkExistsIcon,
   Block as MarkIgnoredIcon,
   CloudUpload as MarkMissingIcon,
@@ -35,6 +38,7 @@ import { useList, useNotification, useUpdate } from "@refinedev/core";
 import { useQuery } from "@tanstack/react-query";
 import { BoardShell, ProductDetailDrawer, ProductPresenceBadge, type ComparisonRow } from "@/components/board";
 import { DataPanel, FilterBar, ImageThumb, SectionHeader, VerdictBadge } from "@/components/shared";
+import { SingleProductUploadDialog } from "@/components/products/SingleProductUploadDialog";
 import { supabaseDataClient } from "@/utils/supabase/client";
 
 type CatalogTab = "inventory" | "comparison" | "superpharm" | "categories";
@@ -63,10 +67,91 @@ const STATUS_LABELS: Record<string, string> = {
   rejected: "נדחה",
 };
 
+type PlatformStatus = "uploaded" | "missing" | "failed" | "needs_fix" | "in_progress";
+
+type SimpleProductRow = {
+  id: number;
+  name: string | null;
+  brand: string | null;
+  category: string | null;
+  ean: string | null;
+  image: string | null;
+  hacontainer_url: string | null;
+  source_status: "uploaded" | "missing";
+  superpharm_status: PlatformStatus;
+  issues: string[];
+  other_platforms: Array<{ channel: string; status: PlatformStatus }>;
+};
+
+type SimpleProductsResponse = {
+  ok: boolean;
+  counts: {
+    total_products: number;
+    source_uploaded: number;
+    source_missing: number;
+    superpharm_uploaded: number;
+    superpharm_missing: number;
+    ready: number;
+    needs_fix: number;
+    failed: number;
+    in_progress: number;
+    upload_total: number;
+  };
+  rows: SimpleProductRow[];
+  total: number;
+  page: number;
+  pageSize: number;
+  error?: string;
+};
+
+const SIMPLE_STATUS: Record<PlatformStatus, { label: string; color: "success" | "warning" | "error" | "info" }> = {
+  uploaded: { label: "הועלה", color: "success" },
+  missing: { label: "חסר", color: "warning" },
+  failed: { label: "נכשל", color: "error" },
+  needs_fix: { label: "צריך תיקון", color: "warning" },
+  in_progress: { label: "בתהליך", color: "info" },
+};
+
+function PlatformStatusBadge({ status }: { status: PlatformStatus }) {
+  const meta = SIMPLE_STATUS[status];
+  return (
+    <Stack direction="row" spacing={0.7} alignItems="center" sx={{ minWidth: 0 }}>
+      <Box
+        sx={(theme) => ({
+          width: 8,
+          height: 8,
+          borderRadius: "50%",
+          flex: "0 0 auto",
+          bgcolor: theme.palette[meta.color].main,
+        })}
+      />
+      <Typography variant="body2" sx={{ fontWeight: 600 }} noWrap>
+        {meta.label}
+      </Typography>
+    </Stack>
+  );
+}
+
+const fetchSimpleProducts = async (page: number, q: string): Promise<SimpleProductsResponse> => {
+  const sp = new URLSearchParams({
+    scope: "catalog",
+    page: String(page),
+    pageSize: "18",
+  });
+  if (q.trim()) sp.set("q", q.trim());
+
+  const res = await fetch(`/api/board/products?${sp.toString()}`, { cache: "no-store" });
+  const json = (await res.json()) as SimpleProductsResponse;
+  if (!res.ok || !json.ok) throw new Error(json.error ?? "לא הצלחנו לטעון את רשימת המוצרים");
+  return json;
+};
+
 export default function BoardCatalog() {
   const router = useRouter();
   const params = useSearchParams();
-  const tabParam = (params.get("tab") as CatalogTab | null) ?? "inventory";
+  const requestedTab = params.get("tab");
+  const rawTab = TABS.some((item) => item.key === requestedTab) ? (requestedTab as CatalogTab) : null;
+  const tabParam = rawTab ?? "inventory";
   const [tab, setTab] = useState<CatalogTab>(tabParam);
 
   useEffect(() => {
@@ -79,6 +164,10 @@ export default function BoardCatalog() {
     sp.set("tab", next);
     router.replace(`/board/catalog?${sp.toString()}`);
   };
+
+  if (!rawTab) {
+    return <SimpleProductList />;
+  }
 
   return (
     <BoardShell
@@ -96,6 +185,281 @@ export default function BoardCatalog() {
         {tab === "categories" && <CategoriesTab />}
       </Box>
     </BoardShell>
+  );
+}
+
+function SimpleProductList() {
+  const [search, setSearch] = useState("");
+  const deferredSearch = useDeferredValue(search);
+  const [page, setPage] = useState(1);
+  const [singleDialogOpen, setSingleDialogOpen] = useState(false);
+
+  useEffect(() => {
+    setPage(1);
+  }, [deferredSearch]);
+
+  const { data, isError, isFetching, isLoading, error, refetch } = useQuery({
+    queryKey: ["board-simple-products", page, deferredSearch],
+    queryFn: () => fetchSimpleProducts(page, deferredSearch),
+    staleTime: 30_000,
+  });
+
+  const rows = data?.rows ?? [];
+  const total = data?.total ?? 0;
+  const pageSize = data?.pageSize ?? 18;
+
+  const cols: GridColDef<SimpleProductRow>[] = useMemo(
+    () => [
+      {
+        field: "image",
+        headerName: "",
+        width: 64,
+        sortable: false,
+        filterable: false,
+        renderCell: (p) => <ImageThumb src={p.row.image} size={42} />,
+      },
+      {
+        field: "name",
+        headerName: "שם המוצר",
+        flex: 1.6,
+        minWidth: 240,
+        renderCell: (p) => (
+          <Tooltip title={p.row.name ?? ""}>
+            <Typography variant="body2" sx={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontWeight: 600 }}>
+              {p.row.name || "מוצר ללא שם"}
+            </Typography>
+          </Tooltip>
+        ),
+      },
+      {
+        field: "brand",
+        headerName: "מותג",
+        width: 130,
+        renderCell: (p) => (
+          <Typography variant="body2" color="text.secondary" noWrap>
+            {p.row.brand ?? "—"}
+          </Typography>
+        ),
+      },
+      {
+        field: "category",
+        headerName: "קטגוריה",
+        width: 160,
+        renderCell: (p) => (
+          <Typography variant="body2" color="text.secondary" noWrap>
+            {p.row.category ?? "—"}
+          </Typography>
+        ),
+      },
+      {
+        field: "ean",
+        headerName: "ברקוד",
+        width: 150,
+        renderCell: (p) =>
+          p.row.ean ? (
+            <Typography variant="body2" sx={{ direction: "ltr", fontVariantNumeric: "tabular-nums", color: "text.secondary" }}>
+              {p.row.ean}
+            </Typography>
+          ) : (
+            <Typography variant="body2" color="text.disabled">—</Typography>
+          ),
+      },
+      {
+        field: "source_status",
+        headerName: "הקונטיינר",
+        width: 130,
+        sortable: false,
+        renderCell: (p) => <PlatformStatusBadge status={p.row.source_status} />,
+      },
+      {
+        field: "superpharm_status",
+        headerName: "סופר-פארם",
+        width: 130,
+        sortable: false,
+        renderCell: (p) => <PlatformStatusBadge status={p.row.superpharm_status} />,
+      },
+      {
+        field: "issues",
+        headerName: "בעיה / הערה",
+        flex: 1.1,
+        minWidth: 180,
+        sortable: false,
+        renderCell: (p) =>
+          p.row.issues.length > 0 ? (
+            <Tooltip title={p.row.issues.join(" · ")}>
+              <Typography
+                variant="caption"
+                color={p.row.superpharm_status === "failed" ? "error.main" : "text.secondary"}
+                sx={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+              >
+                {p.row.issues.slice(0, 2).join(" · ")}
+              </Typography>
+            </Tooltip>
+          ) : (
+            <Typography variant="caption" color="text.disabled">—</Typography>
+          ),
+      },
+    ],
+    [],
+  );
+
+  return (
+    <BoardShell
+      eyebrow="רשימת מוצרים"
+      title="כל המוצרים במקום אחד"
+      description="כאן אפשר לראות בפשטות איפה כל מוצר כבר קיים, ומה עדיין חסר."
+    >
+      <Stack spacing={3}>
+        <Paper
+          elevation={0}
+          sx={(theme) => ({
+            p: { xs: 1.5, md: 1.75 },
+            borderRadius: 1,
+            border: `1px solid ${alpha(theme.palette.text.primary, 0.08)}`,
+            bgcolor: theme.palette.background.paper,
+            boxShadow: "0 1px 2px rgba(27, 36, 34, 0.03)",
+          })}
+        >
+          <Stack direction={{ xs: "column", md: "row" }} spacing={1.4} alignItems={{ md: "center" }}>
+            <TextField
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              label="חיפוש מוצר"
+              placeholder="שם, מותג או ברקוד"
+              fullWidth
+              inputProps={{ style: { fontSize: 16 } }}
+            />
+            <Button
+              variant="contained"
+              size="large"
+              color="primary"
+              startIcon={<AddIcon />}
+              onClick={() => setSingleDialogOpen(true)}
+              sx={{ minHeight: 48, px: 2.6, fontWeight: 600, whiteSpace: "nowrap" }}
+            >
+              מוצר חדש
+            </Button>
+            <Button
+              variant="outlined"
+              size="large"
+              onClick={() => refetch()}
+              disabled={isFetching}
+              sx={{ minHeight: 48, px: 3, fontWeight: 600, whiteSpace: "nowrap" }}
+            >
+              רענון
+            </Button>
+          </Stack>
+        </Paper>
+
+        <Box
+          sx={{
+            display: "grid",
+            gridTemplateColumns: { xs: "1fr", sm: "repeat(2, minmax(0, 1fr))", lg: "repeat(4, minmax(0, 1fr))" },
+            gap: 1.25,
+          }}
+        >
+          <SimpleStatCard label="כל המוצרים" value={data?.counts.total_products ?? 0} tone="primary" />
+          <SimpleStatCard label="קיים ב-HaContainer" value={data?.counts.source_uploaded ?? 0} tone="success" />
+          <SimpleStatCard label="קיים ב-Super-Pharm" value={data?.counts.superpharm_uploaded ?? 0} tone="success" />
+          <SimpleStatCard label="צריך טיפול" value={(data?.counts.needs_fix ?? 0) + (data?.counts.failed ?? 0)} tone="warning" />
+        </Box>
+
+        {isError && (
+          <Alert severity="error" sx={{ borderRadius: 1, fontSize: 18 }}>
+            {(error as Error).message}
+          </Alert>
+        )}
+
+        <SectionHeader
+          title="מוצרים"
+          subtitle={data ? `${fmt.format(total)} מוצרים נמצאו` : "טוען מוצרים"}
+        />
+
+        {!isLoading && rows.length === 0 ? (
+          <Stack alignItems="center" spacing={2} sx={{ py: 8, px: 2, textAlign: "center" }}>
+            <Typography variant="h5" fontWeight={600}>
+              אין מוצרים להצגה כרגע
+            </Typography>
+            <Typography variant="body1" color="text.secondary" sx={{ maxWidth: 520 }}>
+              נסו לחפש שם אחר, או עברו למסך ההעלאה כדי לבדוק מוצרים שממתינים לטיפול.
+            </Typography>
+            <Button href="/board/upload" variant="contained" size="large" sx={{ minHeight: 52, px: 4, fontWeight: 600 }}>
+              למסך העלאת מוצרים
+            </Button>
+          </Stack>
+        ) : (
+          <DataPanel>
+            <DataGrid
+              rows={rows}
+              columns={cols}
+              getRowId={(r) => r.id}
+              autoHeight
+              disableRowSelectionOnClick
+              paginationMode="server"
+              rowCount={total}
+              paginationModel={{ page: page - 1, pageSize }}
+              onPaginationModelChange={(m) => setPage(m.page + 1)}
+              pageSizeOptions={[18, 25, 50]}
+              loading={isLoading || isFetching}
+              rowHeight={72}
+              sx={{ border: "none" }}
+            />
+          </DataPanel>
+        )}
+      </Stack>
+      <SingleProductUploadDialog
+        open={singleDialogOpen}
+        onClose={() => setSingleDialogOpen(false)}
+        onSuccess={() => {
+          void refetch();
+        }}
+      />
+    </BoardShell>
+  );
+}
+
+function SimpleStatCard({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: number;
+  tone: "primary" | "success" | "warning";
+}) {
+  return (
+    <Card
+      variant="outlined"
+      sx={(theme) => ({
+        borderRadius: 1,
+        bgcolor: theme.palette.background.paper,
+        borderColor: alpha(theme.palette.text.primary, 0.09),
+        boxShadow: "none",
+        position: "relative",
+        overflow: "hidden",
+        "&:before": {
+          content: '""',
+          position: "absolute",
+          insetBlock: 0,
+          insetInlineStart: 0,
+          width: 3,
+          backgroundColor: theme.palette[tone].main,
+        },
+      })}
+    >
+      <CardContent sx={{ p: 2 }}>
+        <Typography variant="body2" color="text.secondary" fontWeight={600}>
+          {label}
+        </Typography>
+        <Typography
+          variant="h4"
+          fontWeight={700}
+          sx={{ mt: 0.75, color: "text.primary", letterSpacing: 0 }}
+        >
+          {fmt.format(value)}
+        </Typography>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -705,9 +1069,9 @@ function ComparisonTab() {
       </FilterBar>
 
       {selection.length > 0 && (
-        <Paper sx={{ p: 1.5, backgroundImage: "none", borderColor: "primary.main", bgcolor: "rgba(193, 32, 38, 0.05)" }}>
+        <Paper sx={{ p: 1.5, backgroundImage: "none", borderColor: "primary.main", bgcolor: "rgba(37, 99, 235, 0.05)" }}>
           <Stack direction={{ xs: "column", md: "row" }} alignItems={{ md: "center" }} justifyContent="space-between" spacing={1.5}>
-            <Typography sx={{ fontWeight: 850 }}>
+            <Typography sx={{ fontWeight: 600 }}>
               {selection.length} פריטים נבחרו
             </Typography>
             <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>

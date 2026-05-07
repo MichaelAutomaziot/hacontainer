@@ -58,6 +58,7 @@ export const KpiCard = ({
               sx={{
                 lineHeight: 1,
                 color: "text.primary",
+                fontWeight: 700,
                 fontVariantNumeric: "tabular-nums",
               }}
             >
@@ -73,7 +74,7 @@ export const KpiCard = ({
                 gap: 0.4,
                 mt: 0.55,
                 color: delta.positive ? "success.main" : "error.main",
-                fontWeight: 900,
+                fontWeight: 600,
               }}
             >
               {delta.positive ? "▲" : "▼"} {formatNumber(Math.abs(delta.value))}
@@ -89,17 +90,10 @@ export const KpiCard = ({
         {icon && (
           <Box
             sx={(t) => ({
-              width: 46,
-              height: 46,
-              borderRadius: 2,
-              bgcolor: alpha(t.palette[color].main, 0.12),
               color: t.palette[color].main,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              boxShadow: `inset 0 0 0 1px ${alpha(t.palette[color].main, 0.16)}`,
+              display: "inline-flex",
               flex: "0 0 auto",
-              "& .MuiSvgIcon-root": { fontSize: 26 },
+              "& .MuiSvgIcon-root": { fontSize: 28 },
             })}
           >
             {icon}
@@ -113,12 +107,11 @@ export const KpiCard = ({
           color={color}
           sx={{
             mt: 2,
-            height: 8,
+            height: 6,
             borderRadius: 999,
-            bgcolor: "rgba(29, 37, 35, 0.08)",
+            bgcolor: "rgba(29, 37, 35, 0.06)",
             "& .MuiLinearProgress-bar": {
               borderRadius: 999,
-              backgroundImage: "linear-gradient(90deg, currentColor, rgba(255,255,255,.32))",
             },
           }}
         />
@@ -149,8 +142,8 @@ export const KpiCard = ({
           prefetch={false}
           sx={{
             height: "100%",
-            transition: "transform 180ms ease, background-color 180ms ease",
-            "&:hover": { transform: "translateY(-2px)", bgcolor: "rgba(255,255,255,0.5)" },
+            transition: "background-color 160ms ease",
+            "&:hover": { bgcolor: "rgba(37, 99, 235, 0.04)" },
           }}
         >
           {inner}

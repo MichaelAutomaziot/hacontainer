@@ -39,7 +39,7 @@ import {
 } from "@refinedev/core";
 import type { UserIdentity } from "@/types/user";
 
-export const BOARD_NAV = [
+export const LEGACY_BOARD_NAV = [
   {
     href: "/board/dashboard",
     label: "דשבורד",
@@ -66,6 +66,21 @@ export const BOARD_NAV = [
   },
 ] as const;
 
+export const BOARD_NAV = [
+  {
+    href: "/board/upload",
+    label: "העלאת מוצרים",
+    hint: "בדיקה והעלאה בלחיצה אחת",
+    icon: <UploadIcon />,
+  },
+  {
+    href: "/board/catalog",
+    label: "רשימת מוצרים",
+    hint: "מה קיים בכל פלטפורמה",
+    icon: <CatalogIcon />,
+  },
+] as const;
+
 const LEGACY_LINKS = [
   { href: "/shipments", label: "משלוחים" },
   { href: "/pickup-management", label: "ניהול איסוף" },
@@ -74,7 +89,7 @@ const LEGACY_LINKS = [
   { href: "/users", label: "משתמשים" },
 ];
 
-const SIDEBAR_WIDTH = 256;
+const SIDEBAR_WIDTH = 260;
 
 const initialsOf = (name?: string | null, email?: string | null) => {
   const source = (name ?? email ?? "").trim();
@@ -116,30 +131,31 @@ function SidebarContent({ onClose }: { onClose?: () => void }) {
 
   return (
     <Box
+      dir="rtl"
       sx={{
         width: SIDEBAR_WIDTH,
         height: "100%",
         display: "flex",
         flexDirection: "column",
-        bgcolor: "background.paper",
-        borderInlineStart: `1px solid ${alpha(theme.palette.text.primary, 0.08)}`,
+        bgcolor: "#fbfbf9",
+        borderInlineStart: `1px solid ${alpha(theme.palette.text.primary, 0.09)}`,
       }}
     >
       {/* Logo header */}
       <Box
         sx={{
-          px: 2,
-          py: 2,
+          px: 1.7,
+          py: 1.6,
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
           gap: 1,
-          borderBottom: `1px solid ${alpha(theme.palette.text.primary, 0.06)}`,
+          borderBottom: `1px solid ${alpha(theme.palette.text.primary, 0.07)}`,
         }}
       >
         <Box
           component={Link}
-          href="/board/dashboard"
+          href="/board/upload"
           onClick={onClose}
           sx={{
             display: "flex",
@@ -153,7 +169,7 @@ function SidebarContent({ onClose }: { onClose?: () => void }) {
           <img
             src="/brand/hacontainer-logo-transparent.png"
             alt="הקונטיינר"
-            style={{ width: 168, height: "auto", maxHeight: 48, objectFit: "contain" }}
+            style={{ width: 150, height: "auto", maxHeight: 42, objectFit: "contain" }}
           />
         </Box>
         {onClose && (
@@ -164,7 +180,7 @@ function SidebarContent({ onClose }: { onClose?: () => void }) {
       </Box>
 
       {/* Nav */}
-      <Stack spacing={0.4} sx={{ p: 1.2, flex: 1, overflowY: "auto" }}>
+      <Stack spacing={0.5} sx={{ p: 1.1, flex: 1, overflowY: "auto" }}>
         {BOARD_NAV.map((item) => {
           const active = isActiveRoute(pathname, item.href);
           return (
@@ -177,43 +193,43 @@ function SidebarContent({ onClose }: { onClose?: () => void }) {
                 sx={(theme) => ({
                   display: "flex",
                   alignItems: "center",
-                  gap: 1.4,
-                  px: 1.4,
-                  py: 1.2,
-                  borderRadius: 1.5,
+                  gap: 1.1,
+                  px: 1.25,
+                  py: 1.15,
+                  borderRadius: 1.25,
                   textDecoration: "none",
-                  color: active ? theme.palette.primary.main : theme.palette.text.primary,
-                  bgcolor: active ? alpha(theme.palette.primary.main, 0.09) : "transparent",
-                  borderInlineEnd: active
-                    ? `3px solid ${theme.palette.primary.main}`
-                    : "3px solid transparent",
-                  transition: "background-color 160ms ease, color 160ms ease",
+                  color: theme.palette.text.primary,
+                  bgcolor: active ? alpha(theme.palette.primary.main, 0.075) : "transparent",
+                  border: `1px solid ${active ? alpha(theme.palette.primary.main, 0.18) : "transparent"}`,
+                  borderInlineEnd: active ? `3px solid ${theme.palette.primary.main}` : "3px solid transparent",
+                  transition: "background-color 160ms ease, border-color 160ms ease, color 160ms ease",
                   "&:hover": {
-                    bgcolor: active ? alpha(theme.palette.primary.main, 0.12) : alpha(theme.palette.text.primary, 0.04),
+                    bgcolor: active ? alpha(theme.palette.primary.main, 0.1) : alpha(theme.palette.text.primary, 0.035),
+                    borderColor: active ? alpha(theme.palette.primary.main, 0.22) : alpha(theme.palette.text.primary, 0.08),
                   },
                 })}
               >
                 <Box
                   sx={(theme) => ({
-                    width: 36,
-                    height: 36,
-                    borderRadius: 1.2,
+                    width: 38,
+                    height: 38,
+                    borderRadius: 1,
                     display: "grid",
                     placeItems: "center",
                     bgcolor: active
-                      ? alpha(theme.palette.primary.main, 0.14)
+                      ? alpha(theme.palette.primary.main, 0.11)
                       : alpha(theme.palette.text.primary, 0.05),
                     color: active ? theme.palette.primary.main : theme.palette.text.secondary,
-                    "& svg": { fontSize: 20 },
+                    "& svg": { fontSize: 21 },
                   })}
                 >
                   {item.icon}
                 </Box>
                 <Stack spacing={0} sx={{ minWidth: 0 }}>
-                  <Typography variant="subtitle2" sx={{ lineHeight: 1.2, fontWeight: 800 }} noWrap>
+                  <Typography variant="subtitle2" sx={{ lineHeight: 1.22, fontWeight: 600 }} noWrap>
                     {item.label}
                   </Typography>
-                  <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1.1, fontSize: "0.7rem" }} noWrap>
+                  <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1.25, fontSize: "0.74rem" }} noWrap>
                     {item.hint}
                   </Typography>
                 </Stack>
@@ -232,17 +248,17 @@ function SidebarContent({ onClose }: { onClose?: () => void }) {
               alignItems: "center",
               gap: 1.4,
               px: 1.4,
-              py: 1,
-              borderRadius: 1.5,
+              py: 0.85,
+              borderRadius: 1.25,
               color: theme.palette.text.secondary,
               "&:hover": { bgcolor: alpha(theme.palette.text.primary, 0.04) },
             })}
           >
             <Box
               sx={(theme) => ({
-                width: 32,
-                height: 32,
-                borderRadius: 1.2,
+                width: 30,
+                height: 30,
+                borderRadius: 1,
                 display: "grid",
                 placeItems: "center",
                 bgcolor: alpha(theme.palette.text.primary, 0.05),
@@ -263,8 +279,8 @@ function SidebarContent({ onClose }: { onClose?: () => void }) {
       {isExistAuthentication && (
         <Box
           sx={{
-            p: 1.2,
-            borderTop: `1px solid ${alpha(theme.palette.text.primary, 0.06)}`,
+            p: 1.1,
+            borderTop: `1px solid ${alpha(theme.palette.text.primary, 0.07)}`,
           }}
         >
           <ButtonBase
@@ -274,12 +290,12 @@ function SidebarContent({ onClose }: { onClose?: () => void }) {
               display: "flex",
               alignItems: "center",
               gap: 1.2,
-              p: 1,
-              borderRadius: 1.5,
+              p: 0.9,
+              borderRadius: 1.25,
               "&:hover": { bgcolor: alpha(theme.palette.text.primary, 0.05) },
             }}
           >
-            <Avatar sx={{ width: 36, height: 36, fontSize: 13, bgcolor: theme.palette.secondary.main, color: "#fff" }}>
+            <Avatar sx={{ width: 34, height: 34, fontSize: 13, bgcolor: alpha(theme.palette.secondary.main, 0.92), color: "#fff" }}>
               {initialsOf(identity?.name, identity?.email)}
             </Avatar>
             <Stack spacing={0} sx={{ minWidth: 0, flex: 1, textAlign: "right" }}>
@@ -392,6 +408,11 @@ export function BoardSider() {
           display: { xs: "none", md: "block" },
           width: SIDEBAR_WIDTH,
           flexShrink: 0,
+          position: "fixed",
+          top: 0,
+          right: 0,
+          bottom: 0,
+          zIndex: theme.zIndex.drawer,
           "& .MuiDrawer-paper": {
             width: SIDEBAR_WIDTH,
             boxSizing: "border-box",

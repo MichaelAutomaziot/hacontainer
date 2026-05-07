@@ -13,7 +13,7 @@ export const dynamic = "force-dynamic";
 export const metadata = {
   title: "הקונטיינר | מערכת ניהול",
   description: "מערכת הניהול של הקונטיינר לסנכרון קטלוג, פיילוט ותפעול.",
-  themeColor: "#c12026",
+  themeColor: "#2563eb",
 };
 
 const sanitizeForScript = (s: string | undefined | null): string => {
@@ -37,7 +37,7 @@ const ConfigError = ({ missing }: { missing: string[] }) => (
       }}
     >
       <div style={{ maxWidth: 720, margin: "40px auto" }}>
-        <h1 style={{ color: "#c12026", margin: 0, fontSize: 28 }}>תצורה חסרה ב-Railway</h1>
+        <h1 style={{ color: "#dc2626", margin: 0, fontSize: 28 }}>תצורה חסרה ב-Railway</h1>
         <p style={{ marginTop: 16, fontSize: 16 }}>
           המערכת אינה יכולה להתחיל כי משתני הסביבה הבאים לא מוגדרים על השירות ב-Railway:
         </p>
@@ -74,7 +74,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   const configScript = `window.__SUPABASE_CONFIG__ = {url: ${sanitizeForScript(url)}, anonKey: ${sanitizeForScript(anon)}};`;
 
   return (
-    <html lang="he" dir="rtl">
+    <html lang="he" dir="ltr">
       <head>
         <link rel="icon" type="image/x-icon" href="/favicon.ico" />
         <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
@@ -91,7 +91,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
           dangerouslySetInnerHTML={{ __html: configScript }}
         />
       </head>
-      <body>
+      <body dir="ltr">
         <Providers>{children}</Providers>
       </body>
     </html>

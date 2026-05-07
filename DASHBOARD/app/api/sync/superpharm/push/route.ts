@@ -67,6 +67,9 @@ const INV_COLS =
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+const hasSourceCatalogProduct = (row: InvRow): boolean =>
+  Boolean((row.hacontainer_id ?? "").trim() || (row.hacontainer_url ?? "").trim());
+
 /** GS1 mod-10 check digit for an EAN-13 body (12 digits). */
 const gs1Check = (body12: string): number => {
   let s = 0;
@@ -352,6 +355,15 @@ export async function POST(req: Request) {
     );
   }
 
+  const blockedBySourceCatalog = invRows
+    .filter((r) => !hasSourceCatalogProduct(r))
+    .map((r) => ({
+      sku: r.sku ?? `inv:${r.id}`,
+      inv_id: r.id,
+      errors: ["product must exist in HaContainer / Konimbo first"],
+    }));
+  invRows = invRows.filter(hasSourceCatalogProduct);
+
   // 1b. Auto-mint internal EAN-13 for any row that lacks one. Mirakl OF01
   // requires product-id; without an EAN we can't ship offers via the
   // 'official' import_type. Prefix 299 is GS1's reserved internal range —
@@ -516,6 +528,36 @@ export async function POST(req: Request) {
         }))
       : [];
 
+  let dryPm01Eligible = needsPm01.length;
+  let dryPm01BlockedByData = 0;
+  let dryPm01BlockedByBrand = 0;
+  let dryPm01BlockedByCategory = 0;
+  let dryPm01Rejected: { sku: string; inv_id: number; errors: string[] }[] = [];
+  if (dry && needsPm01.length > 0 && !chained) {
+    const pm01Dry = await dispatchPm01({
+      mode: "by_ids",
+      ids: needsPm01.map((r) => r.id),
+      dry: true,
+    });
+    dryPm01Eligible = pm01Dry.eligible ?? 0;
+    dryPm01BlockedByData = pm01Dry.blocked_by_data ?? 0;
+    dryPm01BlockedByBrand = pm01Dry.blocked_by_brand ?? 0;
+    dryPm01BlockedByCategory = pm01Dry.blocked_by_category ?? 0;
+    dryPm01Rejected = [
+      ...(pm01Dry.rejected ?? []),
+      ...(pm01Dry.unresolvable_brands ?? []).map((r) => ({
+        sku: r.sku,
+        inv_id: r.inv_id,
+        errors: [`brand not recognized: ${r.brand}`],
+      })),
+      ...(pm01Dry.unresolvable_categories ?? []).map((r) => ({
+        sku: r.sku,
+        inv_id: r.inv_id,
+        errors: [`category not ready: ${r.category ?? r.category_id ?? "missing"}`],
+      })),
+    ];
+  }
+
   if (invRows.length === 0) {
     // No OF01-eligible rows. If we kicked off PM01 for this batch, that's a
     // valid "deferred" outcome (pilot button click → catalog sync started,
@@ -524,16 +566,22 @@ export async function POST(req: Request) {
     const explainNoMatch =
       needsPm01.length > 0 && !hasDeferredPm01
         ? `${needsPm01.length} EAN(s) need PM01 (product create) first but PM01 dispatch did not produce a job${pm01DispatchError ? `: ${pm01DispatchError}` : ` (probable cause: missing required PM01 data — name, EAN, brand, or image — on all selected rows; check pm01_dispatch_error / unresolvable_brands)`}`
-        : "no inventory rows match selection (after catalog gate)";
+        : blockedBySourceCatalog.length > 0
+          ? `${blockedBySourceCatalog.length} product(s) must exist in HaContainer / Konimbo first`
+          : "no inventory rows match selection (after catalog gate)";
     return NextResponse.json(
       {
         ok: dry || hasDeferredPm01,
         eligible: 0,
+        blocked_by_source_catalog: blockedBySourceCatalog.length,
         blocked_by_duplicate: blockedByDuplicate,
         blocked_by_catalog: blockedByCatalog.length,
         blocked_by_priceFor: 0,
-        rejected: blockedByCatalog,
-        needs_pm01_count: needsPm01.length,
+        blocked_by_pm01_data: dryPm01BlockedByData,
+        blocked_by_pm01_brand: dryPm01BlockedByBrand,
+        blocked_by_pm01_category: dryPm01BlockedByCategory,
+        rejected: [...blockedBySourceCatalog, ...blockedByCatalog, ...dryPm01Rejected],
+        needs_pm01_count: dry ? dryPm01Eligible : needsPm01.length,
         pm01_dispatched_count: pm01DispatchedCount,
         pm01_sync_job_id: pm01DispatchedJobId,
         pm01_dispatch_error: pm01DispatchError,
@@ -607,14 +655,18 @@ export async function POST(req: Request) {
       // Surface the needs-PM01 count so the UI can enable the upload button
       // when the only "work to do" is catalog creation. Without this, the
       // first-time bulk push always shows eligible=0 and the button is dead.
-      needs_pm01_count: needsPm01.length,
+      needs_pm01_count: dryPm01Eligible,
       blocked_by_duplicate: blockedByDuplicate,
+      blocked_by_source_catalog: blockedBySourceCatalog.length,
       blocked_by_catalog: blockedByCatalog.length,
       blocked_by_priceFor: rejected.length,
-      rejected: [...rejected, ...blockedByCatalog],
+      blocked_by_pm01_data: dryPm01BlockedByData,
+      blocked_by_pm01_brand: dryPm01BlockedByBrand,
+      blocked_by_pm01_category: dryPm01BlockedByCategory,
+      rejected: [...blockedBySourceCatalog, ...rejected, ...blockedByCatalog, ...dryPm01Rejected],
       pm01_dispatched_count: pm01DispatchedCount,
       pm01_sync_job_id: pm01DispatchedJobId,
-      total_candidates: invRows.length + blockedByDuplicate + blockedByCatalog.length + needsPm01.length,
+      total_candidates: invRows.length + blockedBySourceCatalog.length + blockedByDuplicate + blockedByCatalog.length + needsPm01.length,
       elapsed_s: Number(((Date.now() - t0) / 1000).toFixed(2)),
     });
   }
@@ -624,10 +676,11 @@ export async function POST(req: Request) {
       {
         ok: false,
         error: `all ${invRows.length + blockedByCatalog.length} payloads rejected pre-flight`,
+        blocked_by_source_catalog: blockedBySourceCatalog.length,
         blocked_by_duplicate: blockedByDuplicate,
         blocked_by_catalog: blockedByCatalog.length,
         blocked_by_priceFor: rejected.length,
-        rejected: [...rejected, ...blockedByCatalog],
+        rejected: [...blockedBySourceCatalog, ...rejected, ...blockedByCatalog],
       },
       { status: 422 }
     );
@@ -661,9 +714,10 @@ export async function POST(req: Request) {
         mode,
         sku_count: accepted.length,
         rejected_count: rejected.length,
+        blocked_by_source_catalog: blockedBySourceCatalog.length,
         blocked_by_duplicate: blockedByDuplicate,
         blocked_by_catalog: blockedByCatalog.length,
-        rejected: [...rejected, ...blockedByCatalog],
+        rejected: [...blockedBySourceCatalog, ...rejected, ...blockedByCatalog],
         skus: accepted.map((a) => a.sku),
         inv_ids: accepted.map((a) => a.invId),
         import_type: importType,

@@ -27,7 +27,7 @@ export function RouteLoading() {
             height: 30,
             borderRadius: "50%",
             border: "3px solid #d4dad6",
-            borderTopColor: "#c12026",
+            borderTopColor: "#2563eb",
             animation: "rf-route-spin 0.75s linear infinite",
           }}
         />

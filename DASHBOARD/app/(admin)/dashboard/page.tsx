@@ -1,5 +1,5 @@
-import { LegacyRedirect } from "@/components/shared";
+import { redirect } from "next/navigation";
 
 export default function Page() {
-  return <LegacyRedirect to="/board/dashboard" />;
+  redirect("/board/upload");
 }

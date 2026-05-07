@@ -6,7 +6,6 @@ import {
   Alert,
   Box,
   Button,
-  Chip,
   CircularProgress,
   Divider,
   IconButton,
@@ -151,21 +150,11 @@ export default function LoginPage() {
               flexDirection: "column",
               justifyContent: "space-between",
               minHeight: { md: 560 },
-              bgcolor: "rgba(38, 31, 32, 0.98)",
+              bgcolor: "#241f20",
               color: "#f7fbf8",
               position: "relative",
               overflow: "hidden",
-              backgroundImage:
-                "linear-gradient(135deg, rgba(193,32,38,.62), rgba(255,255,255,.08)), linear-gradient(180deg, #2b2324, #171415)",
-              "&:before": {
-                content: '""',
-                position: "absolute",
-                inset: 0,
-                background:
-                  "linear-gradient(90deg, rgba(255,255,255,.08) 1px, transparent 1px), linear-gradient(180deg, rgba(255,255,255,.06) 1px, transparent 1px)",
-                backgroundSize: "30px 30px",
-                maskImage: "linear-gradient(180deg, rgba(0,0,0,.82), transparent)",
-              },
+              backgroundImage: "none",
             }}
           >
             <Stack spacing={2.5} sx={{ position: "relative" }}>
@@ -177,7 +166,7 @@ export default function LoginPage() {
                   display: "grid",
                   placeItems: "center",
                   bgcolor: "rgba(255,255,255,0.94)",
-                  boxShadow: "inset 0 0 0 1px rgba(255,255,255,.55), 0 18px 36px rgba(0,0,0,.22)",
+                  boxShadow: "0 8px 22px rgba(0,0,0,.18)",
                   overflow: "hidden",
                 }}
               >
@@ -228,11 +217,6 @@ export default function LoginPage() {
                   </Stack>
                 </Box>
               ))}
-              <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
-                <Chip label="RTL" sx={{ color: "#fff", borderColor: "rgba(255,255,255,.28)" }} variant="outlined" />
-                <Chip label="Ops" sx={{ color: "#fff", borderColor: "rgba(255,255,255,.28)" }} variant="outlined" />
-                <Chip label="Live sync" sx={{ color: "#fff", borderColor: "rgba(255,255,255,.28)" }} variant="outlined" />
-              </Stack>
             </Stack>
           </Paper>
 
@@ -310,7 +294,7 @@ export default function LoginPage() {
                       py: 1.5,
                       mt: 0.5,
                       fontSize: "1.05rem",
-                      fontWeight: 900,
+                      fontWeight: 600,
                       color: "#ffffff !important",
                       letterSpacing: 0,
                     }}

@@ -15,16 +15,20 @@ declare module '@mui/material/styles' {
 
 const RTL_DIRECTION = 'rtl';
 
-// HaContainer brand palette — red sampled directly from the official logo (#c12026).
+// Calm enterprise blue palette — primary `#2563eb` (Tailwind blue-600).
 const ink = '#1b2422';
 const muted = '#61706a';
 const paper = '#fbfcf8';
 const paperStrong = '#ffffff';
 const canvas = '#f3f0ee';
 const border = 'rgba(27, 36, 34, 0.1)';
-const brandRed = '#c12026';
-const brandRedDark = '#8c1820';
-const brandRedLight = '#e04c4a';
+// Names kept for backwards compatibility throughout the file; values are now blue.
+const brandRed = '#2563eb';
+const brandRedDark = '#1e40af';
+const brandRedLight = '#60a5fa';
+const errorRed = '#dc2626';
+const errorRedDark = '#991b1b';
+const errorRedLight = '#f87171';
 const charcoal = '#242121';
 const blue = '#4f5864';
 const green = '#2f7d4f';
@@ -40,19 +44,19 @@ const hebrewTypography = {
     'sans-serif',
   ].join(','),
 
-  h1: { fontFamily: 'Rubik, Assistant, sans-serif', fontSize: '2.36rem', fontWeight: 800, letterSpacing: 0 },
-  h2: { fontFamily: 'Rubik, Assistant, sans-serif', fontSize: '2rem', fontWeight: 800, letterSpacing: 0 },
-  h3: { fontFamily: 'Rubik, Assistant, sans-serif', fontSize: '1.76rem', fontWeight: 800, letterSpacing: 0 },
-  h4: { fontFamily: 'Rubik, Assistant, sans-serif', fontSize: '1.46rem', fontWeight: 800, letterSpacing: 0 },
-  h5: { fontFamily: 'Rubik, Assistant, sans-serif', fontSize: '1.22rem', fontWeight: 800, letterSpacing: 0 },
-  h6: { fontFamily: 'Rubik, Assistant, sans-serif', fontSize: '1.03rem', fontWeight: 800, letterSpacing: 0 },
-  subtitle1: { fontWeight: 800, letterSpacing: 0, lineHeight: 1.35 },
-  subtitle2: { fontWeight: 800, letterSpacing: 0, lineHeight: 1.4 },
-  body1: { fontSize: '1rem', lineHeight: 1.64, letterSpacing: 0 },
-  body2: { fontSize: '0.91rem', lineHeight: 1.58, letterSpacing: 0 },
-  caption: { fontSize: '0.78rem', lineHeight: 1.55, letterSpacing: 0 },
-  overline: { fontSize: '0.73rem', fontWeight: 900, letterSpacing: 0 },
-  button: { textTransform: 'none', fontWeight: 850, letterSpacing: 0 },
+  h1: { fontFamily: 'Rubik, Assistant, sans-serif', fontSize: '2.6rem', fontWeight: 700, letterSpacing: 0 },
+  h2: { fontFamily: 'Rubik, Assistant, sans-serif', fontSize: '2.2rem', fontWeight: 700, letterSpacing: 0 },
+  h3: { fontFamily: 'Rubik, Assistant, sans-serif', fontSize: '1.9rem', fontWeight: 600, letterSpacing: 0 },
+  h4: { fontFamily: 'Rubik, Assistant, sans-serif', fontSize: '1.6rem', fontWeight: 600, letterSpacing: 0 },
+  h5: { fontFamily: 'Rubik, Assistant, sans-serif', fontSize: '1.35rem', fontWeight: 600, letterSpacing: 0 },
+  h6: { fontFamily: 'Rubik, Assistant, sans-serif', fontSize: '1.18rem', fontWeight: 600, letterSpacing: 0 },
+  subtitle1: { fontSize: '1.05rem', fontWeight: 500, letterSpacing: 0, lineHeight: 1.4 },
+  subtitle2: { fontSize: '0.98rem', fontWeight: 500, letterSpacing: 0, lineHeight: 1.4 },
+  body1: { fontSize: '1.05rem', lineHeight: 1.6, letterSpacing: 0 },
+  body2: { fontSize: '0.98rem', lineHeight: 1.55, letterSpacing: 0 },
+  caption: { fontSize: '0.88rem', lineHeight: 1.5, letterSpacing: 0 },
+  overline: { fontSize: '0.82rem', fontWeight: 600, letterSpacing: 0 },
+  button: { fontSize: '1rem', textTransform: 'none', fontWeight: 600, letterSpacing: 0 },
 };
 
 export const theme = createTheme(
@@ -85,9 +89,9 @@ export const theme = createTheme(
         dark: '#8f5509',
       },
       error: {
-        main: brandRed,
-        light: '#dd7469',
-        dark: brandRedDark,
+        main: errorRed,
+        light: errorRedLight,
+        dark: errorRedDark,
       },
       info: {
         main: blue,
@@ -111,11 +115,8 @@ export const theme = createTheme(
 
     shadows: [
       'none',
-      '0 1px 2px rgba(27, 36, 34, 0.05), 0 1px 1px rgba(27, 36, 34, 0.04)',
-      '0 8px 22px rgba(27, 36, 34, 0.07)',
-      '0 14px 34px rgba(27, 36, 34, 0.09)',
-      '0 18px 46px rgba(27, 36, 34, 0.11)',
-      ...Array(20).fill('0 24px 64px rgba(27, 36, 34, 0.13)'),
+      '0 1px 2px rgba(27, 36, 34, 0.04)',
+      ...Array(23).fill('0 1px 2px rgba(27, 36, 34, 0.04), 0 8px 22px rgba(27, 36, 34, 0.05)'),
     ] as never,
 
     mixins: {
@@ -130,11 +131,16 @@ export const theme = createTheme(
           html: {
             minHeight: '100%',
             backgroundColor: canvas,
+            direction: 'ltr',
+            overflowX: 'hidden',
           },
           body: {
             minHeight: '100%',
+            width: '100%',
             color: ink,
             backgroundColor: canvas,
+            direction: 'ltr',
+            overflowX: 'hidden',
             scrollbarColor: '#b8aaa8 #f3f0ee',
           },
           '*': {
@@ -166,13 +172,8 @@ export const theme = createTheme(
             paddingInline: 16,
             boxShadow: 'none',
             whiteSpace: 'nowrap',
-            transition: 'transform 160ms ease, box-shadow 160ms ease, background-color 160ms ease, opacity 160ms ease',
-            '&:hover': {
-              transform: 'translateY(-1px)',
-              boxShadow: `0 10px 22px ${alpha(ink, 0.1)}`,
-            },
+            transition: 'background-color 160ms ease, border-color 160ms ease, opacity 160ms ease',
             '&.Mui-disabled': {
-              transform: 'none',
               boxShadow: 'none',
               opacity: 0.62,
               cursor: 'not-allowed',
@@ -187,9 +188,6 @@ export const theme = createTheme(
             },
           },
           contained: {
-            // Disabled state for any contained button: keep readable contrast
-            // by overriding both color and background, otherwise per-color
-            // gradients below leak through and we get dark text on red.
             '&.Mui-disabled': {
               color: '#ffffff',
               backgroundImage: 'none',
@@ -198,22 +196,27 @@ export const theme = createTheme(
           },
           containedPrimary: {
             color: '#ffffff',
-            backgroundImage: `linear-gradient(135deg, ${brandRed}, ${brandRedDark})`,
+            backgroundImage: 'none',
+            backgroundColor: brandRed,
             '&:hover': {
-              backgroundImage: `linear-gradient(135deg, ${brandRedDark}, ${brandRed})`,
+              backgroundColor: brandRedDark,
             },
           },
           containedSecondary: {
             color: '#ffffff',
-            backgroundImage: `linear-gradient(135deg, ${charcoal}, #3b3535)`,
+            backgroundImage: 'none',
+            backgroundColor: charcoal,
+            '&:hover': {
+              backgroundColor: '#3b3535',
+            },
           },
           outlined: {
-            borderColor: alpha(ink, 0.13),
-            backgroundColor: alpha(paperStrong, 0.72),
+            borderColor: alpha(ink, 0.16),
+            backgroundColor: 'transparent',
             color: ink,
             '&:hover': {
               borderColor: alpha(brandRed, 0.38),
-              backgroundColor: alpha(brandRed, 0.06),
+              backgroundColor: alpha(brandRed, 0.04),
             },
           },
           text: {
@@ -229,7 +232,7 @@ export const theme = createTheme(
             border: `1px solid ${border}`,
             backgroundImage: 'none',
             backgroundColor: paper,
-            boxShadow: '0 1px 2px rgba(27, 36, 34, 0.04), 0 6px 18px rgba(27, 36, 34, 0.04)',
+            boxShadow: '0 1px 2px rgba(27, 36, 34, 0.04)',
           },
           outlined: {
             borderColor: alpha(ink, 0.1),
@@ -247,7 +250,7 @@ export const theme = createTheme(
             border: `1px solid ${border}`,
             backgroundImage: 'none',
             backgroundColor: paper,
-            boxShadow: '0 1px 2px rgba(27, 36, 34, 0.04), 0 8px 22px rgba(27, 36, 34, 0.05)',
+            boxShadow: '0 1px 2px rgba(27, 36, 34, 0.04)',
             overflow: 'hidden',
           },
         },
@@ -275,7 +278,7 @@ export const theme = createTheme(
           root: {
             textAlign: 'right',
             transformOrigin: 'top right',
-            fontWeight: 800,
+            fontWeight: 600,
             color: muted,
           },
         },
@@ -318,7 +321,7 @@ export const theme = createTheme(
         styleOverrides: {
           root: {
             borderRadius: 7,
-            fontWeight: 850,
+            fontWeight: 600,
             maxWidth: '100%',
           },
           label: {
@@ -326,7 +329,7 @@ export const theme = createTheme(
             textOverflow: 'ellipsis',
           },
           outlined: {
-            backgroundColor: alpha(paperStrong, 0.62),
+            backgroundColor: 'transparent',
             borderColor: alpha(ink, 0.13),
           },
           icon: {
@@ -341,10 +344,9 @@ export const theme = createTheme(
           root: {
             borderRadius: 8,
             color: ink,
-            transition: 'transform 160ms ease, background-color 160ms ease, color 160ms ease',
+            transition: 'background-color 160ms ease, color 160ms ease',
             '&:hover': {
-              transform: 'translateY(-1px)',
-              backgroundColor: alpha(brandRed, 0.08),
+              backgroundColor: alpha(brandRed, 0.06),
               color: brandRedDark,
             },
           },
@@ -382,7 +384,7 @@ export const theme = createTheme(
         styleOverrides: {
           root: {
             fontFamily: 'Rubik, Assistant, sans-serif',
-            fontWeight: 800,
+            fontWeight: 700,
             borderBottom: `1px solid ${alpha(ink, 0.08)}`,
           },
         },
@@ -404,7 +406,7 @@ export const theme = createTheme(
         styleOverrides: {
           root: {
             minHeight: 42,
-            fontWeight: 850,
+            fontWeight: 600,
             borderRadius: 8,
           },
         },
@@ -422,9 +424,9 @@ export const theme = createTheme(
       MuiTableHead: {
         styleOverrides: {
           root: {
-            backgroundColor: alpha(brandRed, 0.08),
+            backgroundColor: alpha(brandRed, 0.05),
             '& .MuiTableCell-root': {
-              fontWeight: 900,
+              fontWeight: 600,
               color: ink,
             },
           },
@@ -455,21 +457,21 @@ export const theme = createTheme(
               borderRadius: 8,
             },
             '& .MuiDataGrid-columnHeaders': {
-              background: `linear-gradient(180deg, ${alpha(brandRed, 0.11)}, ${alpha(paperStrong, 0.84)})`,
+              backgroundColor: alpha(brandRed, 0.05),
               borderBottom: `1px solid ${alpha(ink, 0.12)}`,
-              minHeight: '48px !important',
-              fontSize: '0.88rem',
-              fontWeight: 900,
+              minHeight: '54px !important',
+              fontSize: '1rem',
+              fontWeight: 600,
               color: ink,
             },
             '& .MuiDataGrid-columnHeader': {
               outline: 'none !important',
             },
             '& .MuiDataGrid-columnHeaderTitle': {
-              fontWeight: 900,
+              fontWeight: 600,
             },
             '& .MuiDataGrid-cell': {
-              fontSize: '0.89rem',
+              fontSize: '1rem',
               borderBottomColor: alpha(ink, 0.065),
               outline: 'none !important',
               alignContent: 'center',
@@ -517,14 +519,12 @@ export const theme = createTheme(
         styleOverrides: {
           paper: {
             borderRadius: 0,
-            borderLeft: `1px solid ${alpha(paperStrong, 0.16)}`,
-            borderRight: 0,
-              background: [
-              `linear-gradient(180deg, ${alpha('#261f20', 0.99)}, ${alpha('#171415', 0.985)})`,
-              `linear-gradient(135deg, ${alpha(brandRed, 0.24)}, transparent 40%, ${alpha('#ffffff', 0.06)})`,
-            ].join(','),
-            color: '#f7fbf8',
-            boxShadow: '-18px 0 50px rgba(20, 14, 15, 0.25)',
+            borderInlineStart: `1px solid ${alpha(ink, 0.08)}`,
+            borderInlineEnd: 0,
+            backgroundImage: 'none',
+            backgroundColor: '#fbfbf9',
+            color: ink,
+            boxShadow: 'none',
             '& .MuiTypography-root': {
               color: 'inherit',
             },
@@ -535,18 +535,18 @@ export const theme = createTheme(
               paddingBlock: 8,
             },
             '& .MuiListItemIcon-root': {
-              color: 'rgba(247, 251, 248, 0.72)',
+              color: muted,
               minWidth: 38,
             },
             '& .MuiListItemText-primary': {
-              color: '#f7fbf8',
-              fontWeight: 850,
+              color: ink,
+              fontWeight: 600,
             },
             '& .MuiListItemText-secondary': {
-              color: 'rgba(247, 251, 248, 0.62)',
+              color: muted,
             },
             '& .MuiCollapse-root .MuiListItemButton-root': {
-              color: 'rgba(247, 251, 248, 0.8)',
+              color: ink,
             },
           },
         },
@@ -563,7 +563,7 @@ export const theme = createTheme(
       MuiListItemText: {
         styleOverrides: {
           primary: {
-            fontWeight: 850,
+            fontWeight: 600,
           },
         },
       },
@@ -572,8 +572,8 @@ export const theme = createTheme(
         styleOverrides: {
           root: {
             backgroundColor: 'transparent',
-            color: 'rgba(247, 251, 248, 0.58)',
-            fontWeight: 900,
+            color: muted,
+            fontWeight: 600,
             fontSize: '0.74rem',
             lineHeight: 2.5,
           },
@@ -587,17 +587,17 @@ export const theme = createTheme(
             marginInline: 8,
             marginBlock: 2,
             minHeight: 42,
-            color: 'rgba(247, 251, 248, 0.84)',
+            color: ink,
             '&.Mui-selected': {
-              backgroundColor: alpha(paperStrong, 0.14),
-              color: '#ffffff',
+              backgroundColor: alpha(brandRed, 0.08),
+              color: brandRedDark,
               boxShadow: `inset -3px 0 0 ${brandRed}`,
               '&:hover': {
-                backgroundColor: alpha(paperStrong, 0.18),
+                backgroundColor: alpha(brandRed, 0.12),
               },
             },
             '&:hover': {
-              backgroundColor: alpha(paperStrong, 0.09),
+              backgroundColor: alpha(ink, 0.04),
             },
           },
         },

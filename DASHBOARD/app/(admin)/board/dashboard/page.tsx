@@ -1,1 +1,5 @@
-export { default } from "./PageClient";
+import { redirect } from "next/navigation";
+
+export default function Page() {
+  redirect("/board/upload");
+}

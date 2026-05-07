@@ -535,6 +535,15 @@ Use n8n skills and the n8n-kb MCP server for:
 - **Testing:** Test locally before deploying to production n8n
 - **Language:** Client-facing content in Hebrew unless specified otherwise
 - **Privacy:** Minimal data retention — delete sensitive data after processing
+- **Single-product upload:** Pluggable connector pattern at `lib/server/connectors/`.
+  Each connector implements `Connector` from `types.ts` (`preflight` + `pushProduct`).
+  Orchestrator at `app/api/products/single-upload/route.ts` iterates `[konimbo, superpharm]`
+  in order; Konimbo must succeed before Super-Pharm runs because PM01 requires
+  `hacontainer_id`. Adding a new platform = drop a file under `connectors/`,
+  add to the orchestrator's `CONNECTORS` array.
+- **Konimbo env vars:** `KONIMBO_API_KEY`, `KONIMBO_BASE_URL`, `KONIMBO_STORE_ID`.
+  Konimbo connector is a stub — confirm endpoint path + body shape against
+  Konimbo developer docs before production rollout (TODO block in `konimbo.ts`).
 
 ---
 

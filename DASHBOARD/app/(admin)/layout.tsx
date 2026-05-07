@@ -19,7 +19,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       { name: 'board-group', meta: { label: 'בורדים' } },
       {
         name: 'dashboard',
-        list: '/board/dashboard',
+        list: '/board/upload',
         meta: { parent: 'board-group', label: 'דשבורד' },
       },
       // Catalog board hosts inventory + comparison + superpharm + categories.
@@ -134,15 +134,30 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         }}
       >
         <Suspense fallback={<RouteLoading />}>
-          <Box sx={{ minHeight: '100vh', display: 'flex' }}>
+          <Box
+            className="admin-shell-wrapper"
+            sx={{
+              minHeight: '100vh',
+              direction: 'rtl',
+              bgcolor: '#f6f5f2',
+              backgroundImage: 'none',
+              boxSizing: 'border-box',
+              width: '100%',
+              overflowX: 'hidden',
+            }}
+          >
             <BoardSider />
             <Box
               component="main"
               sx={{
-                flex: 1,
                 minWidth: 0,
-                width: { xs: '100%', md: `calc(100% - ${BOARD_SIDEBAR_WIDTH}px)` },
-                marginInlineStart: { xs: 0, md: `${BOARD_SIDEBAR_WIDTH}px` },
+                minHeight: '100vh',
+                width: '100%',
+                direction: 'rtl',
+                bgcolor: '#f6f5f2',
+                backgroundImage: 'none',
+                boxSizing: 'border-box',
+                overflowX: 'hidden',
               }}
             >
               {children}

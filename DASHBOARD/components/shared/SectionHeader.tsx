@@ -28,20 +28,15 @@ export function SectionHeader({
       spacing={1.5}
       sx={[{ width: "100%" }, ...(Array.isArray(sx) ? sx : sx ? [sx] : [])]}
     >
-      <Stack direction="row" spacing={1.4} alignItems="center" sx={{ minWidth: 0 }}>
+      <Stack direction="row" spacing={1.1} alignItems="center" sx={{ minWidth: 0 }}>
         {icon && (
           <Box
-            sx={(theme) => ({
-              width: 38,
-              height: 38,
-              borderRadius: 1.5,
-              display: "grid",
-              placeItems: "center",
-              color: theme.palette.primary.main,
-              bgcolor: "rgba(193, 32, 38, 0.09)",
+            sx={{
+              color: "primary.main",
+              display: "inline-flex",
               flex: "0 0 auto",
               "& .MuiSvgIcon-root": { fontSize: 22 },
-            })}
+            }}
           >
             {icon}
           </Box>

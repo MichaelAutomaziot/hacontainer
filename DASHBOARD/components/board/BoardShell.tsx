@@ -1,6 +1,6 @@
 "use client";
 
-import { Box, Container, Fade, Stack, Typography, type SxProps, type Theme } from "@mui/material";
+import { Box, Container, Fade, Stack, Typography, alpha, type SxProps, type Theme } from "@mui/material";
 import type { ReactNode } from "react";
 
 export interface BoardShellProps {
@@ -26,20 +26,26 @@ export function BoardShell({
 }: BoardShellProps) {
   return (
     <Box
-      dir="rtl"
+      dir="ltr"
       sx={[
         {
           width: "100%",
-          py: { xs: 2, md: 3 },
-          px: { xs: 1.25, md: 2 },
+          minHeight: "100vh",
+          position: "relative",
+          boxSizing: "border-box",
+          py: { xs: 2, md: 3.25 },
+          px: { xs: 1.5, md: 3 },
+          bgcolor: "#f6f5f2",
+          overflowX: "hidden",
         },
         ...(Array.isArray(sx) ? sx : sx ? [sx] : []),
       ]}
     >
       <Container
+        dir="rtl"
         maxWidth={false}
         disableGutters
-        sx={{ width: "100%", maxWidth, mx: "auto" }}
+        sx={{ width: "100%", maxWidth, mx: "auto", boxSizing: "border-box" }}
       >
         <Fade in timeout={260}>
           <Box>
@@ -48,19 +54,31 @@ export function BoardShell({
               alignItems={{ xs: "stretch", md: "flex-end" }}
               justifyContent="space-between"
               spacing={2}
-              sx={{ mb: { xs: 2, md: 2.5 } }}
+              sx={(theme) => ({
+                mb: { xs: 2, md: 2.5 },
+                pb: { xs: 1.5, md: 2 },
+                borderBottom: `1px solid ${alpha(theme.palette.text.primary, 0.07)}`,
+              })}
             >
-              <Box sx={{ minWidth: 0 }}>
+              <Box sx={{ minWidth: 0, maxWidth: 820 }}>
                 {eyebrow && (
-                  <Typography variant="overline" color="text.secondary" sx={{ display: "block", lineHeight: 1.2 }}>
+                  <Typography
+                    variant="overline"
+                    color="text.secondary"
+                    sx={{ display: "block", lineHeight: 1.2, mb: 0.45, fontWeight: 900 }}
+                  >
                     {eyebrow}
                   </Typography>
                 )}
-                <Typography variant="h4" component="h1" sx={{ lineHeight: 1.16, mt: eyebrow ? 0.4 : 0 }}>
+                <Typography
+                  variant="h4"
+                  component="h1"
+                  sx={{ lineHeight: 1.18, mt: 0, color: "text.primary", fontWeight: 900 }}
+                >
                   {title}
                 </Typography>
                 {description && (
-                  <Typography variant="body2" color="text.secondary" sx={{ mt: 0.8, maxWidth: 760 }}>
+                  <Typography variant="body1" color="text.secondary" sx={{ mt: 0.75, maxWidth: 720 }}>
                     {description}
                   </Typography>
                 )}
@@ -76,7 +94,7 @@ export function BoardShell({
                 </Stack>
               )}
             </Stack>
-            <Stack spacing={{ xs: 2, md: 2.5 }}>{children}</Stack>
+            <Stack spacing={{ xs: 2, md: 2.25 }}>{children}</Stack>
           </Box>
         </Fade>
       </Container>

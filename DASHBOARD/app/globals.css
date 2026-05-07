@@ -33,10 +33,23 @@ svg:not(:root) {
   left: auto !important;
 }
 
+/* Reserve the right gutter for the permanent sidebar at md+ breakpoints.
+   Done in globals.css to bypass stylis-plugin-rtl, which would flip a
+   physical `padding-right` set via emotion sx. */
+@media (min-width: 900px) {
+  .admin-shell-wrapper {
+    padding-right: 260px !important;
+    padding-left: 0 !important;
+  }
+}
+
 html {
   min-height: 100%;
   background: #f3f0ee;
   scroll-behavior: smooth;
+  /* Bumped from default 16px → 18px for elderly readability.
+     All rem-based typography scales proportionally. */
+  font-size: 18px;
 }
 
 body {
@@ -44,11 +57,7 @@ body {
   direction: rtl;
   text-align: right;
   color: #1b2422;
-  background:
-    linear-gradient(90deg, rgba(193, 32, 38, 0.045) 1px, transparent 1px),
-    linear-gradient(180deg, rgba(36, 33, 33, 0.032) 1px, transparent 1px),
-    linear-gradient(135deg, #fbfaf8 0%, #f3f0ee 46%, #f7eceb 100%);
-  background-size: 30px 30px, 30px 30px, 100% 100%;
+  background: #f6f5f2;
   font-family: Assistant, Rubik, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   font-feature-settings: "kern";
   -webkit-font-smoothing: antialiased;
@@ -56,7 +65,7 @@ body {
 }
 
 ::selection {
-  background: rgba(193, 32, 38, 0.22);
+  background: rgba(37, 99, 235, 0.22);
 }
 
 a {
@@ -140,16 +149,12 @@ select {
 }
 
 .MuiTooltip-tooltip {
-  font-size: 0.78rem;
-  font-weight: 700;
+  font-size: 0.92rem;
+  font-weight: 600;
 }
 
 .MuiDialogContent-root {
-  background:
-    linear-gradient(90deg, rgba(193, 32, 38, 0.028) 1px, transparent 1px),
-    linear-gradient(180deg, rgba(27, 36, 34, 0.025) 1px, transparent 1px),
-    #fbfcf8;
-  background-size: 24px 24px, 24px 24px, 100% 100%;
+  background: #fbfcf8;
 }
 
 @keyframes workbench-rise {
@@ -164,16 +169,12 @@ select {
 }
 
 @media (max-width: 720px) {
-  body {
-    background-size: 24px 24px, 24px 24px, 100% 100%;
-  }
-
   .workbench-page {
     padding-inline: 12px;
   }
 
   .MuiDataGrid-root {
-    font-size: 0.82rem;
+    font-size: 0.95rem;
   }
 
   .MuiButton-root {

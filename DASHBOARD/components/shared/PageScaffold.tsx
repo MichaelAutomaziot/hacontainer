@@ -6,11 +6,11 @@ import type { ReactNode } from "react";
 type Tone = "primary" | "secondary" | "success" | "warning" | "error" | "info";
 
 const toneFallback: Record<Tone, string> = {
-  primary: "#c12026",
+  primary: "#2563eb",
   secondary: "#242121",
   success: "#2f7d4f",
   warning: "#c77912",
-  error: "#c12026",
+  error: "#dc2626",
   info: "#4f5864",
 };
 
@@ -34,6 +34,7 @@ export function PageFrame({
       className="workbench-page"
       sx={withSx({
         width: "100%",
+        boxSizing: "border-box",
         maxWidth,
         mx: "auto",
         p: { xs: 2, md: 3 },
@@ -74,19 +75,16 @@ export function PageHeader({
           borderRadius: 2,
           p: { xs: 2, md: 2.6 },
           border: `1px solid ${alpha(main, 0.16)}`,
-          background: [
-            `linear-gradient(135deg, ${alpha(main, 0.12)}, ${alpha(theme.palette.background.paper, 0.92)} 46%, ${alpha(theme.palette.secondary.main, 0.08)})`,
-            `linear-gradient(90deg, ${alpha(theme.palette.common.white, 0.72)} 0 1px, transparent 1px)`,
-          ].join(","),
-          backgroundSize: "100% 100%, 22px 22px",
-          boxShadow: `0 18px 48px ${alpha(theme.palette.common.black, 0.06)}`,
+          backgroundColor: theme.palette.background.paper,
+          backgroundImage: "none",
+          boxShadow: `0 1px 2px ${alpha(theme.palette.common.black, 0.04)}, 0 8px 22px ${alpha(theme.palette.common.black, 0.035)}`,
           "&:before": {
             content: '""',
             position: "absolute",
             insetBlock: 0,
             insetInlineStart: 0,
-            width: 6,
-            background: `linear-gradient(180deg, ${main}, ${theme.palette.secondary.main})`,
+            width: 4,
+            backgroundColor: alpha(main, 0.72),
           },
         };
       }}
