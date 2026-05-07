@@ -22,6 +22,11 @@ import {
   resolveCategoryFromContainerLabel,
   type PM01Row,
 } from "@/lib/shared";
+import {
+  extractAllForCategory,
+  type AttrSpec,
+  type AttrSource,
+} from "@/lib/server/attribute-extractors";
 import { getServiceClient } from "@/utils/supabase/admin";
 
 const PAGE = 500;
@@ -355,6 +360,10 @@ export const dispatchPm01 = async (
     new Set(candidates.map((r) => r.category_id).filter((v): v is string => !!v))
   );
   const catIdToSpCode = new Map<string, string>();
+  /** category_id → list of required attribute specs (already inherited from
+   *  parent hierarchies in `category_attributes`). PM01 builds CSV columns
+   *  for these on every row of the matching category. */
+  const catIdToRequiredAttrs = new Map<string, AttrSpec[]>();
   if (catIds.length > 0) {
     const { data: catRows, error: catErr } = await sb
       .from("categories")
@@ -375,6 +384,33 @@ export const dispatchPm01 = async (
       // Only accept leaves — non-leaf codes are rejected by Mirakl's catalog
       // validator and would silently land in the merchandiser queue forever.
       if (c.sp_category_code && c.is_leaf) catIdToSpCode.set(c.id, c.sp_category_code);
+    }
+
+    // Required-attribute lookup: which attribute_codes does each category
+    // need on PM01? Inheritance was already expanded by migration 0033.
+    const { data: attrRows, error: attrErr } = await sb
+      .from("category_attributes")
+      .select("category_id, attribute_code, type, value_list")
+      .in("category_id", catIds)
+      .eq("required", true);
+    if (attrErr) {
+      // Non-fatal — fall back to no extraction. Logged for diagnosis.
+      console.warn(`[pm01-dispatch] category_attributes lookup failed: ${attrErr.message}`);
+    } else {
+      for (const a of (attrRows ?? []) as {
+        category_id: string;
+        attribute_code: string;
+        type: AttrSpec["type"] | null;
+        value_list: { list_code?: string } | null;
+      }[]) {
+        const list = catIdToRequiredAttrs.get(a.category_id) ?? [];
+        list.push({
+          code: a.attribute_code,
+          type: (a.type ?? "text") as AttrSpec["type"],
+          list_code: a.value_list?.list_code ?? null,
+        });
+        catIdToRequiredAttrs.set(a.category_id, list);
+      }
     }
   }
 
@@ -412,6 +448,27 @@ export const dispatchPm01 = async (
       });
       continue;
     }
+    // Build extra_attrs:
+    //   1. Whatever numeric-keyed attrs are already in technical_specs (e.g.
+    //      seller-supplied screen size).
+    //   2. For every category-required attribute NOT already covered, run
+    //      the extractor over name+description+brand. Defaults guarantee a
+    //      value so Mirakl doesn't reject on "attribute X is required".
+    const baseAttrs = technicalSpecsToExtraAttrs(inv.technical_specs);
+    const requiredSpecs = inv.category_id
+      ? catIdToRequiredAttrs.get(inv.category_id) ?? []
+      : [];
+    const missing = requiredSpecs.filter((s) => !(s.code in baseAttrs));
+    if (missing.length > 0) {
+      const src: AttrSource = {
+        name_he: inv.name_he ?? "",
+        description_he: inv.description_he ?? "",
+        brand: inv.brand,
+      };
+      const extracted = extractAllForCategory(src, missing);
+      Object.assign(baseAttrs, extracted);
+    }
+
     const sku = `inv:${inv.id}`;
     accepted.push({
       invId: inv.id,
@@ -424,7 +481,7 @@ export const dispatchPm01 = async (
         brand_code: brandCode,
         category_code: categoryCode,
         image_url: inv.images![0]!,
-        extra_attrs: technicalSpecsToExtraAttrs(inv.technical_specs),
+        extra_attrs: baseAttrs,
       },
     });
   }
