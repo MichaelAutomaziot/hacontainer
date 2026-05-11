@@ -40,9 +40,9 @@ const StatusChip = ({ status }: { status: string }) => {
 };
 
 const TYPE_LABELS: Record<string, string> = {
-  "sync-konimbo-orphans": "ניקוי יתומים — הקונטיינר",
-  "sync-superpharm-full": "משיכה מלאה — סופר-פארם",
-  "sync-superpharm-orphans": "ניקוי יתומים — סופר-פארם",
+  "sync-konimbo-orphans": "ניקוי יתומים · הקונטיינר",
+  "sync-superpharm-full": "משיכה מלאה · סופר-פארם",
+  "sync-superpharm-orphans": "ניקוי יתומים · סופר-פארם",
   "match-catalog": "השוואת קטלוגים",
   superpharm_of01: "העלאה ל-Mirakl OF01",
   superpharm_pm01: "יצירה בקטלוג ל-Mirakl PM01",

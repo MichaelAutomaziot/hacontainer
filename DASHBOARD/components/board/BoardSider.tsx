@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import {
   Avatar,
   Box,
@@ -13,22 +13,23 @@ import {
   Menu,
   MenuItem,
   Stack,
-  Tooltip,
   Typography,
   alpha,
   useMediaQuery,
   useTheme,
 } from "@mui/material";
 import {
-  Dashboard as DashboardIcon,
-  Inventory2 as CatalogIcon,
-  CloudUpload as UploadIcon,
+  Inventory2Outlined as CatalogIcon,
+  CloudUploadOutlined as UploadIcon,
   SettingsOutlined as SettingsIcon,
+  ManageAccountsOutlined as ProfileIcon,
   Logout as LogoutIcon,
-  HistoryEdu as LegacyIcon,
+  AppsOutlined as LegacyIcon,
   Menu as MenuIcon,
   Close as CloseIcon,
+  ChevronLeft as ChevronIcon,
 } from "@mui/icons-material";
+import { ProfileSettingsDialog } from "@/components/board/ProfileSettingsDialog";
 import {
   useActiveAuthProvider,
   useGetIdentity,
@@ -39,45 +40,36 @@ import {
 } from "@refinedev/core";
 import type { UserIdentity } from "@/types/user";
 
-export const LEGACY_BOARD_NAV = [
-  {
-    href: "/board/dashboard",
-    label: "דשבורד",
-    hint: "מצב המערכת + פעולות מומלצות",
-    icon: <DashboardIcon />,
-  },
-  {
-    href: "/board/catalog",
-    label: "קטלוג",
-    hint: "מוצרים, השוואה, הצעות סופר-פארם",
-    icon: <CatalogIcon />,
-  },
-  {
-    href: "/board/upload",
-    label: "העלאת מוצרים",
-    hint: "בחר מוצרים → העלה לסופר-פארם",
-    icon: <UploadIcon />,
-  },
-  {
-    href: "/board/settings",
-    label: "הגדרות",
-    hint: "חוקי תמחור, ערוצים, סנכרונים",
-    icon: <SettingsIcon />,
-  },
-] as const;
+/* ------------------------------------------------------------------ *
+ *  Navigation model — the four boards, in workflow order.
+ *  Upload is the primary surface; the rest support it.
+ * ------------------------------------------------------------------ */
 
-export const BOARD_NAV = [
+type NavItem = {
+  href: string;
+  label: string;
+  hint: string;
+  icon: React.ReactNode;
+};
+
+export const BOARD_NAV: readonly NavItem[] = [
   {
     href: "/board/upload",
     label: "העלאת מוצרים",
-    hint: "בדיקה והעלאה בלחיצה אחת",
+    hint: "בחירת מוצרים והעלאה לסופר-פארם",
     icon: <UploadIcon />,
   },
   {
     href: "/board/catalog",
     label: "רשימת מוצרים",
-    hint: "מה קיים בכל פלטפורמה",
+    hint: "מלאי, השוואה והצעות סופר-פארם",
     icon: <CatalogIcon />,
+  },
+  {
+    href: "/board/settings",
+    label: "הגדרות",
+    hint: "חוקי תמחור, ערוצים וסנכרונים",
+    icon: <SettingsIcon />,
   },
 ] as const;
 
@@ -89,19 +81,106 @@ const LEGACY_LINKS = [
   { href: "/users", label: "משתמשים" },
 ];
 
-const SIDEBAR_WIDTH = 260;
+const SIDEBAR_WIDTH = 264;
+const LOGO_SRC = "/brand/hacontainer-logo-transparent.png";
 
 const initialsOf = (name?: string | null, email?: string | null) => {
   const source = (name ?? email ?? "").trim();
   if (!source) return "?";
   const parts = source.split(/[\s@.]+/).filter(Boolean);
-  return parts.slice(0, 2).map((s) => s[0]?.toUpperCase() ?? "").join("") || source[0]?.toUpperCase() || "?";
+  return (
+    parts
+      .slice(0, 2)
+      .map((s) => s[0]?.toUpperCase() ?? "")
+      .join("") ||
+    source[0]?.toUpperCase() ||
+    "?"
+  );
 };
 
 const isActiveRoute = (pathname: string, href: string) =>
   pathname === href || pathname.startsWith(`${href}/`) || pathname.startsWith(`${href}?`);
 
-function SidebarContent({ onClose }: { onClose?: () => void }) {
+/* ------------------------------------------------------------------ *
+ *  A single navigation row.
+ * ------------------------------------------------------------------ */
+
+function NavRow({
+  item,
+  active,
+  onNavigate,
+}: {
+  item: NavItem;
+  active: boolean;
+  onNavigate?: () => void;
+}) {
+  return (
+    <Box
+      component={Link}
+      href={item.href}
+      prefetch={false}
+      onClick={onNavigate}
+      aria-current={active ? "page" : undefined}
+      sx={(theme) => ({
+        display: "flex",
+        alignItems: "center",
+        gap: 1.25,
+        px: 1.5,
+        py: 1.15,
+        borderRadius: 2,
+        textDecoration: "none",
+        color: active ? theme.palette.primary.dark : theme.palette.text.primary,
+        bgcolor: active ? alpha(theme.palette.primary.main, 0.085) : "transparent",
+        transition: "background-color 150ms ease, color 150ms ease",
+        "&:hover": {
+          bgcolor: active
+            ? alpha(theme.palette.primary.main, 0.11)
+            : alpha(theme.palette.text.primary, 0.045),
+        },
+        "&:focus-visible": {
+          outline: `2px solid ${alpha(theme.palette.primary.main, 0.45)}`,
+          outlineOffset: 1,
+        },
+      })}
+    >
+      <Box
+        component="span"
+        sx={(theme) => ({
+          flex: "0 0 auto",
+          display: "grid",
+          placeItems: "center",
+          color: active ? theme.palette.primary.main : theme.palette.text.secondary,
+          "& svg": { fontSize: 22 },
+        })}
+      >
+        {item.icon}
+      </Box>
+      <Stack spacing={0} sx={{ minWidth: 0 }}>
+        <Typography
+          variant="subtitle2"
+          noWrap
+          sx={{ lineHeight: 1.25, fontWeight: active ? 700 : 600 }}
+        >
+          {item.label}
+        </Typography>
+        <Typography
+          variant="caption"
+          color="text.secondary"
+          noWrap
+          sx={{ lineHeight: 1.3, fontSize: "0.74rem" }}
+        >
+          {item.hint}
+        </Typography>
+      </Stack>
+    </Box>
+  );
+}
+
+/* ------------------------------------------------------------------ *
+ *  Sidebar body — shared between the desktop rail and the mobile drawer.
+ * ------------------------------------------------------------------ */
+
+function SidebarBody({ onClose }: { onClose?: () => void }) {
   const theme = useTheme();
   const pathname = usePathname() ?? "";
 
@@ -116,12 +195,16 @@ function SidebarContent({ onClose }: { onClose?: () => void }) {
 
   const [userMenuAnchor, setUserMenuAnchor] = useState<null | HTMLElement>(null);
   const [legacyAnchor, setLegacyAnchor] = useState<null | HTMLElement>(null);
+  const [profileOpen, setProfileOpen] = useState(false);
 
   const handleLogout = () => {
     setUserMenuAnchor(null);
     if (warnWhen) {
       const ok = window.confirm(
-        translate("warnWhenUnsavedChanges", "Are you sure you want to leave? You have unsaved changes."),
+        translate(
+          "warnWhenUnsavedChanges",
+          "Are you sure you want to leave? You have unsaved changes.",
+        ),
       );
       if (!ok) return;
       setWarnWhen(false);
@@ -129,193 +212,154 @@ function SidebarContent({ onClose }: { onClose?: () => void }) {
     mutateLogout();
   };
 
+  const dividerColor = alpha(theme.palette.text.primary, 0.08);
+
   return (
     <Box
-      dir="rtl"
       sx={{
         width: SIDEBAR_WIDTH,
         height: "100%",
         display: "flex",
         flexDirection: "column",
-        bgcolor: "#fbfbf9",
-        borderInlineStart: `1px solid ${alpha(theme.palette.text.primary, 0.09)}`,
+        bgcolor: theme.palette.background.paper,
       }}
     >
-      {/* Logo header */}
+      {/* Brand */}
       <Box
         sx={{
-          px: 1.7,
-          py: 1.6,
+          px: 2,
+          py: 1.75,
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
           gap: 1,
-          borderBottom: `1px solid ${alpha(theme.palette.text.primary, 0.07)}`,
+          borderBottom: `1px solid ${dividerColor}`,
         }}
       >
         <Box
           component={Link}
           href="/board/upload"
           onClick={onClose}
-          sx={{
-            display: "flex",
-            alignItems: "center",
-            textDecoration: "none",
-            color: "inherit",
-            flex: 1,
-            minWidth: 0,
-          }}
+          sx={{ display: "flex", alignItems: "center", minWidth: 0, flex: 1 }}
         >
           <img
-            src="/brand/hacontainer-logo-transparent.png"
+            src={LOGO_SRC}
             alt="הקונטיינר"
-            style={{ width: 150, height: "auto", maxHeight: 42, objectFit: "contain" }}
+            style={{ width: 148, height: "auto", maxHeight: 40, objectFit: "contain" }}
           />
         </Box>
         {onClose && (
-          <IconButton size="small" onClick={onClose} sx={{ display: { md: "none" } }}>
+          <IconButton size="small" onClick={onClose} aria-label="סגירת תפריט">
             <CloseIcon fontSize="small" />
           </IconButton>
         )}
       </Box>
 
-      {/* Nav */}
-      <Stack spacing={0.5} sx={{ p: 1.1, flex: 1, overflowY: "auto" }}>
-        {BOARD_NAV.map((item) => {
-          const active = isActiveRoute(pathname, item.href);
-          return (
-            <Tooltip key={item.href} title={item.hint} placement="left" arrow>
-              <Box
-                component={Link}
-                href={item.href}
-                prefetch={false}
-                onClick={onClose}
-                sx={(theme) => ({
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 1.1,
-                  px: 1.25,
-                  py: 1.15,
-                  borderRadius: 1.25,
-                  textDecoration: "none",
-                  color: theme.palette.text.primary,
-                  bgcolor: active ? alpha(theme.palette.primary.main, 0.075) : "transparent",
-                  border: `1px solid ${active ? alpha(theme.palette.primary.main, 0.18) : "transparent"}`,
-                  borderInlineEnd: active ? `3px solid ${theme.palette.primary.main}` : "3px solid transparent",
-                  transition: "background-color 160ms ease, border-color 160ms ease, color 160ms ease",
-                  "&:hover": {
-                    bgcolor: active ? alpha(theme.palette.primary.main, 0.1) : alpha(theme.palette.text.primary, 0.035),
-                    borderColor: active ? alpha(theme.palette.primary.main, 0.22) : alpha(theme.palette.text.primary, 0.08),
-                  },
-                })}
-              >
-                <Box
-                  sx={(theme) => ({
-                    width: 38,
-                    height: 38,
-                    borderRadius: 1,
-                    display: "grid",
-                    placeItems: "center",
-                    bgcolor: active
-                      ? alpha(theme.palette.primary.main, 0.11)
-                      : alpha(theme.palette.text.primary, 0.05),
-                    color: active ? theme.palette.primary.main : theme.palette.text.secondary,
-                    "& svg": { fontSize: 21 },
-                  })}
-                >
-                  {item.icon}
-                </Box>
-                <Stack spacing={0} sx={{ minWidth: 0 }}>
-                  <Typography variant="subtitle2" sx={{ lineHeight: 1.22, fontWeight: 600 }} noWrap>
-                    {item.label}
-                  </Typography>
-                  <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1.25, fontSize: "0.74rem" }} noWrap>
-                    {item.hint}
-                  </Typography>
-                </Stack>
-              </Box>
-            </Tooltip>
-          );
-        })}
-
-        <Divider sx={{ my: 1.4 }} />
-
-        <Tooltip title="גישה למערכות הישנות (משלוחים, איסופים, ספקים, אנליטיקה, משתמשים)" placement="left" arrow>
-          <ButtonBase
-            onClick={(e) => setLegacyAnchor(e.currentTarget)}
-            sx={(theme) => ({
-              display: "flex",
-              alignItems: "center",
-              gap: 1.4,
-              px: 1.4,
-              py: 0.85,
-              borderRadius: 1.25,
-              color: theme.palette.text.secondary,
-              "&:hover": { bgcolor: alpha(theme.palette.text.primary, 0.04) },
-            })}
-          >
-            <Box
-              sx={(theme) => ({
-                width: 30,
-                height: 30,
-                borderRadius: 1,
-                display: "grid",
-                placeItems: "center",
-                bgcolor: alpha(theme.palette.text.primary, 0.05),
-                color: theme.palette.text.secondary,
-                "& svg": { fontSize: 18 },
-              })}
-            >
-              <LegacyIcon />
-            </Box>
-            <Typography variant="body2" sx={{ fontWeight: 700 }}>
-              מערכות נוספות
-            </Typography>
-          </ButtonBase>
-        </Tooltip>
-      </Stack>
-
-      {/* User block */}
-      {isExistAuthentication && (
-        <Box
+      {/* Primary navigation */}
+      <Box sx={{ flex: 1, overflowY: "auto", px: 1.25, py: 1.5 }}>
+        <Typography
+          variant="overline"
           sx={{
-            p: 1.1,
-            borderTop: `1px solid ${alpha(theme.palette.text.primary, 0.07)}`,
+            display: "block",
+            px: 1.5,
+            mb: 0.5,
+            color: "text.secondary",
+            fontSize: "0.68rem",
           }}
         >
+          ניווט
+        </Typography>
+        <Stack spacing={0.5}>
+          {BOARD_NAV.map((item) => (
+            <NavRow
+              key={item.href}
+              item={item}
+              active={isActiveRoute(pathname, item.href)}
+              onNavigate={onClose}
+            />
+          ))}
+        </Stack>
+
+        <Divider sx={{ my: 1.75, borderColor: dividerColor }} />
+
+        <ButtonBase
+          onClick={(e) => setLegacyAnchor(e.currentTarget)}
+          sx={(t) => ({
+            width: "100%",
+            display: "flex",
+            alignItems: "center",
+            gap: 1.25,
+            px: 1.5,
+            py: 1,
+            borderRadius: 2,
+            color: t.palette.text.secondary,
+            textAlign: "start",
+            "&:hover": {
+              bgcolor: alpha(t.palette.text.primary, 0.045),
+              color: t.palette.text.primary,
+            },
+          })}
+        >
+          <LegacyIcon sx={{ fontSize: 21 }} />
+          <Typography variant="subtitle2" sx={{ fontWeight: 600, flex: 1 }}>
+            מערכות נוספות
+          </Typography>
+          <ChevronIcon sx={{ fontSize: 18, opacity: 0.6 }} />
+        </ButtonBase>
+      </Box>
+
+      {/* Account */}
+      {isExistAuthentication && (
+        <Box sx={{ p: 1.25, borderTop: `1px solid ${dividerColor}` }}>
           <ButtonBase
             onClick={(e) => setUserMenuAnchor(e.currentTarget)}
             sx={{
               width: "100%",
               display: "flex",
               alignItems: "center",
-              gap: 1.2,
-              p: 0.9,
-              borderRadius: 1.25,
-              "&:hover": { bgcolor: alpha(theme.palette.text.primary, 0.05) },
+              gap: 1.25,
+              p: 1,
+              borderRadius: 2,
+              "&:hover": { bgcolor: alpha(theme.palette.text.primary, 0.045) },
             }}
           >
-            <Avatar sx={{ width: 34, height: 34, fontSize: 13, bgcolor: alpha(theme.palette.secondary.main, 0.92), color: "#fff" }}>
+            <Avatar
+              sx={{
+                width: 36,
+                height: 36,
+                fontSize: 13,
+                fontWeight: 700,
+                bgcolor: alpha(theme.palette.secondary.main, 0.92),
+                color: "#fff",
+              }}
+            >
               {initialsOf(identity?.name, identity?.email)}
             </Avatar>
-            <Stack spacing={0} sx={{ minWidth: 0, flex: 1, textAlign: "right" }}>
-              <Typography variant="subtitle2" sx={{ lineHeight: 1.15 }} noWrap>
+            <Stack spacing={0} sx={{ minWidth: 0, flex: 1, textAlign: "start" }}>
+              <Typography variant="subtitle2" noWrap sx={{ lineHeight: 1.2 }}>
                 {identity?.name ?? "משתמש"}
               </Typography>
-              <Typography variant="caption" color="text.secondary" sx={{ direction: "ltr", lineHeight: 1.1 }} noWrap>
+              <Typography
+                variant="caption"
+                color="text.secondary"
+                noWrap
+                sx={{ direction: "ltr", textAlign: "start", lineHeight: 1.15 }}
+              >
                 {identity?.email ?? ""}
               </Typography>
             </Stack>
+            <ChevronIcon sx={{ fontSize: 18, opacity: 0.6, transform: "rotate(90deg)" }} />
           </ButtonBase>
         </Box>
       )}
 
+      {/* Legacy systems menu */}
       <Menu
         anchorEl={legacyAnchor}
         open={Boolean(legacyAnchor)}
         onClose={() => setLegacyAnchor(null)}
-        anchorOrigin={{ vertical: "top", horizontal: "right" }}
-        transformOrigin={{ vertical: "top", horizontal: "right" }}
+        anchorOrigin={{ vertical: "top", horizontal: "left" }}
+        transformOrigin={{ vertical: "top", horizontal: "left" }}
       >
         <Box sx={{ px: 2, pt: 1, pb: 0.5 }}>
           <Typography variant="overline" color="text.secondary">
@@ -338,32 +382,53 @@ function SidebarContent({ onClose }: { onClose?: () => void }) {
         ))}
       </Menu>
 
+      {/* Account menu */}
       <Menu
         anchorEl={userMenuAnchor}
         open={Boolean(userMenuAnchor)}
         onClose={() => setUserMenuAnchor(null)}
-        anchorOrigin={{ vertical: "top", horizontal: "right" }}
-        transformOrigin={{ vertical: "bottom", horizontal: "right" }}
+        anchorOrigin={{ vertical: "top", horizontal: "left" }}
+        transformOrigin={{ vertical: "bottom", horizontal: "left" }}
       >
-        <Box sx={{ px: 2, pt: 1.2, pb: 0.6, minWidth: 220 }}>
+        <Box sx={{ px: 2, pt: 1.2, pb: 0.6, minWidth: 230 }}>
           <Typography variant="subtitle2" sx={{ lineHeight: 1.2 }}>
             {identity?.name ?? identity?.email ?? "משתמש"}
           </Typography>
           {identity?.email && (
-            <Typography variant="caption" color="text.secondary" sx={{ direction: "ltr", display: "block" }}>
+            <Typography
+              variant="caption"
+              color="text.secondary"
+              sx={{ direction: "ltr", display: "block", textAlign: "start" }}
+            >
               {identity.email}
             </Typography>
           )}
         </Box>
         <Divider sx={{ my: 0.5 }} />
+        <MenuItem
+          onClick={() => {
+            setUserMenuAnchor(null);
+            setProfileOpen(true);
+          }}
+        >
+          <ProfileIcon fontSize="small" style={{ marginInlineEnd: 8 }} />
+          הגדרות פרופיל
+        </MenuItem>
         <MenuItem onClick={handleLogout}>
           <LogoutIcon fontSize="small" style={{ marginInlineEnd: 8 }} />
           {translate("buttons.logout", "התנתק")}
         </MenuItem>
       </Menu>
+
+      <ProfileSettingsDialog open={profileOpen} onClose={() => setProfileOpen(false)} />
     </Box>
   );
 }
+
+/* ------------------------------------------------------------------ *
+ *  Public component: desktop rail (sticky, physical right edge in RTL)
+ *  + mobile top bar + temporary drawer.
+ * ------------------------------------------------------------------ */
 
 export function BoardSider() {
   const theme = useTheme();
@@ -372,9 +437,10 @@ export function BoardSider() {
 
   return (
     <>
-      {/* Mobile floating menu trigger */}
+      {/* Mobile: sticky top bar carrying the menu trigger */}
       {isCompact && (
         <Box
+          component="header"
           sx={{
             position: "sticky",
             top: 0,
@@ -382,66 +448,44 @@ export function BoardSider() {
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
+            gap: 1,
             px: 1.5,
             py: 1,
             bgcolor: "background.paper",
-            borderBottom: `1px solid ${alpha(theme.palette.text.primary, 0.08)}`,
+            borderBottom: `1px solid ${alpha(theme.palette.text.primary, 0.1)}`,
           }}
         >
-          <IconButton onClick={() => setMobileOpen(true)} size="small">
+          <IconButton onClick={() => setMobileOpen(true)} size="small" aria-label="פתיחת תפריט">
             <MenuIcon />
           </IconButton>
-          <img
-            src="/brand/hacontainer-logo-transparent.png"
-            alt="הקונטיינר"
-            style={{ height: 32, objectFit: "contain" }}
-          />
+          <img src={LOGO_SRC} alt="הקונטיינר" style={{ height: 30, objectFit: "contain" }} />
           <Box sx={{ width: 34 }} />
         </Box>
       )}
 
-      {/* Desktop permanent sidebar (right-anchored for RTL) */}
-      <Drawer
-        variant="permanent"
-        anchor="right"
+      {/* Desktop: fixed rail, pinned to the inline-start edge — which in this
+          RTL document is the physical right. `inset-inline-start` is a logical
+          property, so stylis-plugin-rtl leaves it alone (the old bug was a
+          physical `right: 0` in sx getting flipped to `left: 0`). The matching
+          gutter on <main> is `padding-inline-start` for the same reason. */}
+      <Box
+        component="aside"
         sx={{
-          display: { xs: "none", md: "block" },
+          display: { xs: "none", md: "flex" },
+          flexDirection: "column",
           width: SIDEBAR_WIDTH,
-          flexShrink: 0,
           position: "fixed",
+          insetInlineStart: 0,
           top: 0,
-          right: 0,
-          bottom: 0,
-          zIndex: theme.zIndex.drawer,
-          "& .MuiDrawer-paper": {
-            width: SIDEBAR_WIDTH,
-            boxSizing: "border-box",
-            position: "fixed",
-            top: 0,
-            bottom: 0,
-            right: 0,
-            left: "auto",
-            borderInlineEnd: 0,
-            borderInlineStart: `1px solid ${alpha(theme.palette.text.primary, 0.08)}`,
-            background: theme.palette.background.paper,
-            backgroundImage: "none",
-            color: theme.palette.text.primary,
-            boxShadow: "none",
-            "& .MuiTypography-root": { color: "inherit" },
-            "& .MuiSvgIcon-root": { color: "inherit" },
-            "& .MuiList-root": { paddingBlock: 0 },
-            "& .MuiListItemIcon-root": { color: "inherit", minWidth: 0 },
-            "& .MuiListItemText-primary": { color: "inherit" },
-            "& .MuiListItemText-secondary": { color: theme.palette.text.secondary },
-            "& .MuiCollapse-root .MuiListItemButton-root": { color: "inherit" },
-          },
+          height: "100dvh",
+          zIndex: theme.zIndex.appBar,
+          borderInlineEnd: `1px solid ${alpha(theme.palette.text.primary, 0.1)}`,
         }}
-        PaperProps={{ style: { right: 0, left: "auto" } }}
       >
-        <SidebarContent />
-      </Drawer>
+        <SidebarBody />
+      </Box>
 
-      {/* Mobile temporary drawer */}
+      {/* Mobile: temporary drawer, locked to the physical right edge */}
       <Drawer
         variant="temporary"
         anchor="right"
@@ -453,17 +497,15 @@ export function BoardSider() {
           "& .MuiDrawer-paper": {
             width: SIDEBAR_WIDTH,
             boxSizing: "border-box",
-            background: theme.palette.background.paper,
             backgroundImage: "none",
+            backgroundColor: theme.palette.background.paper,
             color: theme.palette.text.primary,
-            boxShadow: "none",
-            "& .MuiTypography-root": { color: "inherit" },
-            "& .MuiSvgIcon-root": { color: "inherit" },
+            boxShadow: theme.shadows[8],
           },
         }}
         PaperProps={{ style: { right: 0, left: "auto" } }}
       >
-        <SidebarContent onClose={() => setMobileOpen(false)} />
+        <SidebarBody onClose={() => setMobileOpen(false)} />
       </Drawer>
     </>
   );

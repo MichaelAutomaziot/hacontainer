@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import {
   Accordion,
@@ -10,20 +10,28 @@ import {
   Box,
   Button,
   Card,
-  CardActions,
   CardContent,
   Checkbox,
   Chip,
   CircularProgress,
+  Collapse,
   Dialog,
   DialogActions,
   DialogContent,
   DialogTitle,
-  Grid,
+  Divider,
   IconButton,
-  MenuItem,
+  InputAdornment,
+  Pagination,
+  Paper,
   Skeleton,
   Stack,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
   TextField,
   Tooltip,
   Typography,
@@ -40,20 +48,21 @@ import {
   ErrorOutline as ErrorIcon,
   SelectAll as SelectAllIcon,
   ClearAll as ClearAllIcon,
+  OpenInNew as OpenInNewIcon,
+  Search as SearchIcon,
 } from "@mui/icons-material";
 import { useNotification, useUpdate } from "@refinedev/core";
 import { useQuery } from "@tanstack/react-query";
+import { DataGrid, type GridColDef } from "@mui/x-data-grid";
 import {
   BoardShell,
-  ChannelSelector,
   JobStatusTimeline,
-  PricingPreview,
   ValidationChecklist,
   type ChannelKey,
   type JobSummary,
   type ValidationItem,
 } from "@/components/board";
-import { ImageThumb, SectionHeader, StatChip } from "@/components/shared";
+import { DataPanel, ImageThumb, StatChip } from "@/components/shared";
 import Pm01ReadinessDrawer, { type ValidationRow } from "@/components/board/Pm01ReadinessDrawer";
 import { SingleProductUploadDialog } from "@/components/products/SingleProductUploadDialog";
 import { supabaseDataClient } from "@/utils/supabase/client";
@@ -122,9 +131,9 @@ const STATUS_LABEL: Record<string, string> = {
   missing: "ממתין להעלאה",
   approved_for_pilot: "מוכן להעלאה",
   transformed: "מוכן להעלאה",
-  pending_catalog: "בתהליך — נוצר בסופר-פארם",
-  catalog_synced: "בתהליך — מחכה לפרסום",
-  uploading: "בתהליך — נשלח לסופר-פארם",
+  pending_catalog: "בתהליך · נוצר בסופר-פארם",
+  catalog_synced: "בתהליך · מחכה לפרסום",
+  uploading: "בתהליך · נשלח לסופר-פארם",
   uploaded: "הועלה",
   rejected: "נכשל",
 };
@@ -159,6 +168,7 @@ interface PushResponse {
   ok?: boolean;
   import_id?: string | number;
   sku_count?: number;
+  rejected_count?: number;
   rejected?: { sku: string; errors: string[] }[];
   error?: string;
   pm01_dispatched_count?: number;
@@ -173,7 +183,222 @@ interface CheckResponse {
   error?: string;
 }
 
+interface ReadyOffersResponse {
+  ok?: boolean;
+  count?: number;
+  ids?: number[];
+  catalog_ready_count?: number;
+  blocked_by_price?: number;
+  error?: string;
+}
+
 const PAGE_SIZE = 60;
+
+const formatMoney = (value: number | null) =>
+  typeof value === "number" && Number.isFinite(value) && value > 0 ? `₪${fmt.format(value)}` : "חסר מחיר";
+
+const formatRelativeHe = (date: Date) => {
+  const seconds = Math.floor((Date.now() - date.getTime()) / 1000);
+  if (seconds < 30) return "עכשיו";
+  if (seconds < 60) return `לפני ${seconds} שנ׳`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `לפני ${minutes} דק׳`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `לפני ${hours} שע׳`;
+  return date.toLocaleDateString("he-IL", { day: "numeric", month: "short" });
+};
+
+type UploadProductsTableProps = {
+  rows: UploadRow[];
+  loading: boolean;
+  selection: Set<number>;
+  onToggle: (id: number) => void;
+  onOpenReadiness: (id: number) => void;
+  onRemove: (id: number) => void;
+};
+
+function UploadProductsTable({
+  rows,
+  loading,
+  selection,
+  onToggle,
+  onOpenReadiness,
+  onRemove,
+}: UploadProductsTableProps) {
+  const cols = useMemo<GridColDef<UploadRow>[]>(
+    () => [
+      {
+        field: "_select",
+        headerName: "",
+        width: 52,
+        sortable: false,
+        filterable: false,
+        disableColumnMenu: true,
+        align: "center",
+        headerAlign: "center",
+        renderCell: (p) => {
+          const status = p.row.pilot_status ?? p.row.bucket;
+          const isDone = p.row.bucket === "done" || status === "uploaded";
+          return isDone ? (
+            <DoneIcon color="success" fontSize="small" />
+          ) : (
+            <Checkbox
+              size="small"
+              checked={selection.has(p.row.id)}
+              onChange={() => onToggle(p.row.id)}
+              inputProps={{ "aria-label": `בחר מוצר ${p.row.name_he ?? p.row.ean ?? p.row.id}` }}
+            />
+          );
+        },
+      },
+      {
+        field: "image",
+        headerName: "",
+        width: 60,
+        sortable: false,
+        filterable: false,
+        disableColumnMenu: true,
+        align: "center",
+        headerAlign: "center",
+        renderCell: (p) => <ImageThumb src={p.row.image} size={44} />,
+      },
+      {
+        field: "name_he",
+        headerName: "מוצר",
+        flex: 1.6,
+        minWidth: 240,
+        sortable: false,
+        align: "right",
+        headerAlign: "right",
+        renderCell: (p) => (
+          <Stack spacing={0.2} sx={{ width: "100%", minWidth: 0, py: 0.75, textAlign: "right" }}>
+            <Typography
+              variant="body2"
+              sx={{
+                fontWeight: 600,
+                lineHeight: 1.3,
+                display: "-webkit-box",
+                WebkitLineClamp: 2,
+                WebkitBoxOrient: "vertical",
+                overflow: "hidden",
+              }}
+            >
+              {p.row.name_he ?? "מוצר ללא שם"}
+            </Typography>
+            <Typography
+              variant="caption"
+              color="text.secondary"
+              sx={{ lineHeight: 1.3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}
+            >
+              {[p.row.brand, p.row.category, p.row.ean && `EAN ${p.row.ean}`].filter(Boolean).join(" · ") || "אין פרטים נוספים"}
+            </Typography>
+          </Stack>
+        ),
+      },
+      {
+        field: "pilot_status",
+        headerName: "סטטוס",
+        width: 170,
+        sortable: false,
+        align: "right",
+        headerAlign: "right",
+        renderCell: (p) => {
+          const status = p.row.pilot_status ?? p.row.bucket;
+          return (
+            <Chip
+              size="small"
+              color={STATUS_COLOR[status] ?? "default"}
+              variant={status === "missing" ? "outlined" : "filled"}
+              label={STATUS_LABEL[status] ?? status}
+              sx={{ fontWeight: 600, maxWidth: "100%" }}
+            />
+          );
+        },
+      },
+      {
+        field: "price",
+        headerName: "מחיר",
+        width: 130,
+        sortable: false,
+        align: "right",
+        headerAlign: "right",
+        renderCell: (p) => (
+          <Stack spacing={0} sx={{ width: "100%", py: 0.75, textAlign: "right" }}>
+            <Typography variant="body2" sx={{ fontWeight: 700, lineHeight: 1.2 }}>
+              {formatMoney(p.row.price)}
+            </Typography>
+            <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1.2 }}>
+              איסוף: {formatMoney(p.row.pickup_cost)}
+            </Typography>
+          </Stack>
+        ),
+      },
+      {
+        field: "_actions",
+        headerName: "פעולות",
+        width: 140,
+        sortable: false,
+        filterable: false,
+        disableColumnMenu: true,
+        align: "left",
+        headerAlign: "left",
+        renderCell: (p) => (
+          <Stack direction="row" spacing={0.25} alignItems="center">
+            <Tooltip title="בדוק / השלם נתונים" arrow>
+              <IconButton size="small" onClick={() => onOpenReadiness(p.row.id)} aria-label="בדוק והשלם נתונים">
+                <TechIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+            {p.row.hacontainer_url && (
+              <Tooltip title="פתח בהקונטיינר" arrow>
+                <IconButton
+                  size="small"
+                  component="a"
+                  href={p.row.hacontainer_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label="פתח בהקונטיינר"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <OpenInNewIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
+            )}
+            <Tooltip title="הסר מהרשימה" arrow>
+              <IconButton size="small" onClick={() => onRemove(p.row.id)} aria-label="הסר מוצר">
+                <RemoveIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          </Stack>
+        ),
+      },
+    ],
+    [selection, onToggle, onOpenReadiness, onRemove],
+  );
+
+  return (
+    <DataPanel>
+      <DataGrid
+        rows={rows}
+        columns={cols}
+        getRowId={(r) => r.id}
+        autoHeight
+        loading={loading}
+        disableColumnMenu
+        disableRowSelectionOnClick
+        hideFooter
+        rowHeight={72}
+        getRowClassName={(p) => (selection.has(Number(p.id)) ? "upload-row-selected" : "")}
+        sx={(theme) => ({
+          border: "none",
+          "& .upload-row-selected, & .upload-row-selected:hover": {
+            backgroundColor: `${alpha(theme.palette.primary.main, 0.07)} !important`,
+          },
+        })}
+      />
+    </DataPanel>
+  );
+}
 
 export default function BoardUpload() {
   const params = useSearchParams();
@@ -187,6 +412,9 @@ export default function BoardUpload() {
   }, [params]);
 
   const [filter, setFilter] = useState<"all" | "ready" | "in_progress" | "done" | "last_failed">("ready");
+  /** "מעקב סטטוס" panel — collapsed by default; the operator opens it when they
+   *  actually want to watch a running upload. */
+  const [statusOpen, setStatusOpen] = useState(false);
 
   /** PM01 readiness drawer — open per-row to fix missing fields. */
   const [readinessId, setReadinessId] = useState<number | null>(null);
@@ -295,9 +523,27 @@ export default function BoardUpload() {
     },
   });
 
+  const {
+    data: readyOffersData,
+    isLoading: readyOffersLoading,
+    refetch: refetchReadyOffers,
+  } = useQuery<ReadyOffersResponse>({
+    queryKey: ["board-upload-ready-offers"],
+    staleTime: 30_000,
+    queryFn: async () => {
+      const res = await fetch("/api/sync/superpharm/ready-offers");
+      const json: ReadyOffersResponse = await res.json().catch(() => ({}));
+      if (!res.ok || !json.ok) {
+        throw new Error(json.error ?? "טעינת מוצרים מוכנים לשלב 2 נכשלה");
+      }
+      return json;
+    },
+  });
+
   const refetch = () => {
     refetchMissing();
     refetchPipeline();
+    refetchReadyOffers();
   };
 
   const allRows: UploadRow[] = useMemo(() => {
@@ -419,7 +665,17 @@ export default function BoardUpload() {
   const { mutate: updateInv } = useUpdate();
   const { open } = useNotification();
 
-  const removeFromQueue = (id: number) =>
+  const [removeConfirm, setRemoveConfirm] = useState<{ id: number; name: string } | null>(null);
+
+  const requestRemoveFromQueue = (id: number) => {
+    const row = allRows.find((r) => r.id === id);
+    setRemoveConfirm({ id, name: row?.name_he ?? `inv ${id}` });
+  };
+
+  const confirmRemoveFromQueue = () => {
+    if (!removeConfirm) return;
+    const id = removeConfirm.id;
+    setRemoveConfirm(null);
     updateInv(
       { resource: "inventory", id, values: { pilot_status: "ignored" } },
       {
@@ -434,6 +690,7 @@ export default function BoardUpload() {
         },
       },
     );
+  };
 
   const toggleSelect = (id: number) =>
     setSelection((prev) => {
@@ -504,7 +761,7 @@ export default function BoardUpload() {
         items.push({
           kind: "pass",
           message: `${fmt.format(preview.needs_pm01_count ?? 0)} מוצרים ייווצרו תחילה בקטלוג סופר-פארם`,
-          hint: "המערכת תיצור אותם דרך PM01 ותפרסם את ההצעה אוטומטית אחרי שהקטלוג יסתיים.",
+          hint: "המערכת תיצור אותם בקטלוג ותפרסם את ההצעה אוטומטית אחרי הסיום.",
         });
       if ((preview.blocked_by_priceFor ?? 0) > 0)
         items.push({
@@ -516,13 +773,13 @@ export default function BoardUpload() {
         items.push({
           kind: "warn",
           message: `${fmt.format(preview.blocked_by_duplicate ?? 0)} כפולים בסופר-פארם`,
-          hint: "המוצרים האלה כבר קיימים — לא יועלו כדי לא ליצור כפילות.",
+          hint: "המוצרים האלה כבר קיימים, לא יועלו כדי לא ליצור כפילות.",
         });
       if ((preview.blocked_by_catalog ?? 0) > 0)
         items.push({
           kind: "info",
           message: `${fmt.format(preview.blocked_by_catalog ?? 0)} ייווצרו תחילה בסופר-פארם`,
-          hint: "התהליך אוטומטי — ההצעה תפורסם אחרי שהמוצר ייווצר.",
+          hint: "התהליך אוטומטי. ההצעה תפורסם אחרי שהמוצר ייווצר.",
         });
       if ((preview.rejected?.length ?? 0) > 0)
         items.push({
@@ -576,6 +833,86 @@ export default function BoardUpload() {
   const [activeJobs, setActiveJobs] = useState<JobSummary[]>([]);
   const [pollBusy, setPollBusy] = useState(false);
   const [lastChecked, setLastChecked] = useState<Date | null>(null);
+  const [stage2Busy, setStage2Busy] = useState(false);
+  const [stage2Notice, setStage2Notice] = useState<{
+    severity: "info" | "success" | "warning" | "error";
+    message: string;
+  } | null>(null);
+  const stage2CheckHandledRef = useRef<string | null>(null);
+
+  const catalogSyncedIds = useMemo(
+    () => allRows.filter((row) => row.pilot_status === "catalog_synced").map((row) => row.id),
+    [allRows],
+  );
+
+  const stage2ReadyIds = useMemo(() => {
+    const ids = new Set<number>(readyOffersData?.ids ?? catalogSyncedIds);
+    for (const id of catalogSyncedIds) ids.add(id);
+    for (const job of activeJobs) {
+      for (const id of job.ready_for_offer_inv_ids ?? []) ids.add(id);
+    }
+    return Array.from(ids);
+  }, [activeJobs, catalogSyncedIds, readyOffersData?.ids]);
+
+  const overallStatus = useMemo<{
+    label: string;
+    color: "success" | "error" | "info" | "default";
+  }>(() => {
+    if (pollBusy) return { label: "מתעדכן…", color: "info" };
+    if (activeJobs.length === 0) return { label: "אין פעילות", color: "default" };
+    let anyRunning = false;
+    let anyFailed = false;
+    let allComplete = true;
+    for (const j of activeJobs) {
+      const sync = j.sync_status?.toLowerCase() ?? "";
+      const mirakl = j.mirakl_status ?? "";
+      if (sync === "failed" || mirakl === "FAILED" || (j.errors ?? 0) > 0) anyFailed = true;
+      if (sync === "running" || sync === "pending_mirakl") anyRunning = true;
+      if (sync !== "completed" && mirakl !== "COMPLETE") allComplete = false;
+    }
+    if (anyFailed) return { label: "יש שגיאות", color: "error" };
+    if (anyRunning) return { label: "פועל", color: "info" };
+    if (allComplete) return { label: "הושלם", color: "success" };
+    return { label: "ממתין", color: "default" };
+  }, [activeJobs, pollBusy]);
+
+  const { data: recentStatusData, refetch: refetchRecentStatus } = useQuery<CheckResponse>({
+    queryKey: ["board-upload-recent-status"],
+    staleTime: 15_000,
+    queryFn: async () => {
+      const res = await fetch("/api/sync/superpharm/check");
+      const json: CheckResponse = await res.json().catch(() => ({}));
+      if (!res.ok || !json.ok) {
+        throw new Error(json.error ?? "טעינת סטטוס אחרון נכשלה");
+      }
+      return json;
+    },
+  });
+
+  useEffect(() => {
+    const summary = recentStatusData?.summary ?? [];
+    if (summary.length === 0 || activeJobs.length > 0) return;
+    setActiveJobs(summary);
+  }, [activeJobs.length, recentStatusData?.summary]);
+
+  const rememberSubmittedOfferJob = (json: PushResponse, submitted: number) => {
+    if (!json.import_id && !json.sync_job_id) return;
+    const jobId = json.sync_job_id ?? `stage2-${json.import_id ?? Date.now()}`;
+    const job: JobSummary = {
+      job_id: jobId,
+      job_type: "superpharm_of01",
+      import_id: json.import_id ?? null,
+      mirakl_status: "RUNNING",
+      sync_status: "running",
+      submitted,
+      success: 0,
+      errors: 0,
+      promoted_inv: 0,
+      rolled_back_inv: 0,
+    };
+    setActiveJobs((prev) => [job, ...prev.filter((item) => item.job_id !== jobId)].slice(0, 6));
+    setLastChecked(new Date());
+  };
 
   const runPush = async () => {
     if (selection.size === 0) return;
@@ -622,7 +959,7 @@ export default function BoardUpload() {
       const json: CheckResponse = await res.json().catch(() => ({}));
       if (json.ok) {
         const summary = json.summary ?? [];
-        setActiveJobs(summary);
+        if (summary.length > 0) setActiveJobs(summary);
         setLastChecked(new Date());
         const promoted = summary.reduce((a, s) => a + (s.promoted_inv ?? 0), 0);
         const rolled = summary.reduce((a, s) => a + (s.rolled_back_inv ?? 0), 0);
@@ -630,8 +967,35 @@ export default function BoardUpload() {
         const parts = [`נבדקו ${checked} משימות`];
         if (promoted) parts.push(`${promoted} קודמו`);
         if (rolled) parts.push(`${rolled} הוחזרו`);
+        const failedOffers = summary.filter(
+          (job) => job.job_type === "superpharm_of01" && job.sync_status === "failed",
+        );
+        const completedOffers = summary.filter(
+          (job) => job.job_type === "superpharm_of01" && job.sync_status === "completed",
+        );
+        if (failedOffers.length > 0) {
+          const failedJob = failedOffers[0];
+          const failed = failedJob.errors ?? 0;
+          const sent = failedJob.submitted ?? 0;
+          setStage2Notice({
+            severity: "error",
+            message: `שלב 2 חזר עם שגיאות: ${fmt.format(failed)} מתוך ${fmt.format(sent || failed)} הצעות נדחו. פירוט מופיע במעקב למטה.`,
+          });
+        } else if (completedOffers.length > 0) {
+          const okCount = completedOffers.reduce((a, job) => a + (job.success ?? 0), 0);
+          setStage2Notice({
+            severity: "success",
+            message: `${fmt.format(okCount)} הצעות פורסמו בהצלחה בסופר-פארם.`,
+          });
+        } else if (checked === 0 && summary.length === 0) {
+          setStage2Notice({
+            severity: "info",
+            message: "אין כרגע משימת העלאה פעילה. אם שלחת עכשיו, כדאי לבדוק שוב בעוד רגע.",
+          });
+        }
         open?.({ type: "success", message: parts.join(" · ") });
         refetch();
+        refetchRecentStatus();
       } else {
         open?.({ type: "error", message: json.error ?? "בדיקה נכשלה" });
       }
@@ -639,6 +1003,74 @@ export default function BoardUpload() {
       open?.({ type: "error", message: `שגיאת רשת: ${(e as Error).message}` });
     } finally {
       setPollBusy(false);
+    }
+  };
+
+  const runStage2 = async () => {
+    if (stage2Busy) return;
+    let idsForStage2 = stage2ReadyIds;
+    if (idsForStage2.length === 0) {
+      const refreshed = await refetchReadyOffers();
+      idsForStage2 = refreshed.data?.ids ?? [];
+    }
+    if (idsForStage2.length === 0) {
+      open?.({
+        type: "error",
+        message: "אין כרגע מוצרים שהוקמו בקטלוג ומוכנים לשלב 2",
+      });
+      return;
+    }
+    setStage2Busy(true);
+    try {
+      const res = await fetch("/api/sync/superpharm/push", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mode: "by_ids",
+          ids: idsForStage2,
+          importType: "official",
+          chained: true,
+        }),
+      });
+      const json: PushResponse = await res.json().catch(() => ({}));
+      if (!res.ok || !json.ok) {
+        open?.({ type: "error", message: `שלב 2 נכשל: ${json.error ?? res.statusText}` });
+        return;
+      }
+      const sent = json.sku_count ?? 0;
+      const rejectedBeforeSend = json.rejected_count ?? Math.max(0, idsForStage2.length - sent);
+      open?.({
+        type: sent > 0 ? "success" : "error",
+        message:
+          sent > 0
+            ? `${fmt.format(sent)} הצעות מלאות נשלחו לסופר-פארם`
+            : "לא נמצאו מוצרים מוכנים לשליחת הצעה מלאה",
+      });
+      setActiveImportId(json.import_id ?? null);
+      if (sent > 0) {
+        rememberSubmittedOfferJob(json, sent);
+        setStage2Notice({
+          severity: "info",
+          message:
+            rejectedBeforeSend > 0
+              ? `${fmt.format(sent)} הצעות נשלחו לבדיקה. ${fmt.format(rejectedBeforeSend)} מוצרים לא נשלחו כי חסר להם מחיר/נתון מתאים.`
+              : `${fmt.format(sent)} הצעות נשלחו לבדיקה. הסטטוס יתעדכן כאן אחרי שמירקל יסיים לעבד את הקובץ.`,
+        });
+        window.setTimeout(() => {
+          void checkStatus();
+        }, 2500);
+      } else {
+        setStage2Notice({
+          severity: "warning",
+          message: "לא נשלחו הצעות בשלב 2. בדקו אם יש מוצרים שהוקמו בקטלוג ומחיר תקין.",
+        });
+      }
+      refetch();
+      refetchReadyOffers();
+    } catch (e) {
+      open?.({ type: "error", message: `שגיאת רשת בשלב 2: ${(e as Error).message}` });
+    } finally {
+      setStage2Busy(false);
     }
   };
 
@@ -652,6 +1084,17 @@ export default function BoardUpload() {
 
   const isLoadingList = missingFetching || pipelineFetching;
   const totalPages = Math.max(1, Math.ceil(filteredRows.length / PAGE_SIZE));
+  const stage2CheckValue = params.get("stage2check");
+
+  useEffect(() => {
+    if (!stage2CheckValue || stage2CheckHandledRef.current === stage2CheckValue) return;
+    stage2CheckHandledRef.current = stage2CheckValue;
+    const handle = window.setTimeout(() => {
+      void checkStatus();
+    }, 500);
+    return () => window.clearTimeout(handle);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stage2CheckValue]);
 
   return (
     <BoardShell
@@ -679,291 +1122,272 @@ export default function BoardUpload() {
         </Stack>
       }
     >
-      <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+      <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap alignItems="center">
+        <Typography variant="overline" color="text.secondary" sx={{ mr: 1, fontWeight: 600, letterSpacing: 0.4 }}>
+          סינון
+        </Typography>
         <Chip
-          label={`הכל (${fmt.format(counts.total)})`}
+          size="small"
+          label={`הכל · ${fmt.format(counts.total)}`}
           onClick={() => setFilter("all")}
           color={filter === "all" ? "primary" : "default"}
           variant={filter === "all" ? "filled" : "outlined"}
-          sx={{ height: 32 }}
         />
         <Chip
-          label={`מוכנים להעלאה (${fmt.format(counts.ready)})`}
+          size="small"
+          label={`מוכנים · ${fmt.format(counts.ready)}`}
           onClick={() => setFilter("ready")}
           color={filter === "ready" ? "primary" : "default"}
           variant={filter === "ready" ? "filled" : "outlined"}
-          sx={{ height: 32 }}
         />
         <Chip
-          label={`בתהליך (${fmt.format(counts.inProgress)})`}
+          size="small"
+          label={`בתהליך · ${fmt.format(counts.inProgress)}`}
           onClick={() => setFilter("in_progress")}
           color={filter === "in_progress" ? "info" : "default"}
           variant={filter === "in_progress" ? "filled" : "outlined"}
-          sx={{ height: 32 }}
         />
         <Chip
-          label={`הועלו / נכשלו (${fmt.format(counts.done)})`}
+          size="small"
+          label={`הועלו · ${fmt.format(counts.done)}`}
           onClick={() => setFilter("done")}
           color={filter === "done" ? "success" : "default"}
           variant={filter === "done" ? "filled" : "outlined"}
-          sx={{ height: 32 }}
         />
         {(lastFailedIds?.size ?? 0) > 0 && (
-          <Tooltip title="המוצרים מהבאצ' האחרון שנדחו ע״י Mirakl (חסר attribute חובה וכד'). העלה מחדש אחרי תיקון.">
+          <Tooltip title="המוצרים מהבאצ' האחרון שנדחו ע״י סופר-פארם (חסר נתון חובה וכד'). העלה מחדש אחרי תיקון." arrow>
             <Chip
-              label={`כשלון בהעלאה האחרונה (${fmt.format(lastFailedIds!.size)})`}
+              size="small"
+              label={`כשלון אחרון · ${fmt.format(lastFailedIds!.size)}`}
               onClick={() => setFilter("last_failed")}
               color={filter === "last_failed" ? "error" : "default"}
               variant={filter === "last_failed" ? "filled" : "outlined"}
-              sx={{ height: 32 }}
             />
           </Tooltip>
         )}
       </Stack>
 
-      {/* Action card */}
+      {/* Action card. Validation expands only when selection has issues; channel
+       *  selector hidden while superpharm is the sole active channel. */}
       <Card variant="outlined" sx={{ backgroundImage: "none" }}>
         <CardContent sx={{ p: { xs: 2, md: 2.4 } }}>
-          <Stack spacing={2.5}>
-            <SectionHeader
-              title="תהליך ההעלאה"
-              subtitle="בחרו ערוץ, סקרו את הבדיקה ולחצו 'העלה מוצרים'"
-              actions={
-                <Stack direction="row" spacing={1.2} flexWrap="wrap" useFlexGap>
-                  <StatChip label="נבחרו" value={selection.size} tone="primary" />
-                  <StatChip label="עוברים בדיקה" value={eligible} tone="success" />
-                  <StatChip label="חסומים" value={blocked} tone="warning" />
-                </Stack>
-              }
-            />
-
-            <Grid container spacing={3}>
-              <Grid item xs={12} md={5}>
-                <ChannelSelector value={channel} onChange={setChannel} />
-              </Grid>
-              <Grid item xs={12} md={7}>
-                <Stack spacing={1}>
-                  <Typography variant="overline" color="text.secondary">
-                    בדיקה לפני שליחה
-                  </Typography>
-                  {previewLoading ? (
-                    <Skeleton variant="rounded" height={92} />
-                  ) : (
-                    <ValidationChecklist items={validationItems} emptyLabel="בחרו מוצרים כדי לראות את תוצאות הבדיקה" />
-                  )}
-                </Stack>
-              </Grid>
-            </Grid>
-
+          <Stack spacing={2}>
             <Stack
               direction={{ xs: "column", md: "row" }}
               alignItems={{ xs: "stretch", md: "center" }}
               justifyContent="space-between"
               spacing={2}
             >
-              <Typography variant="body2" color="text.secondary">
-                {selection.size > 0
-                  ? `יישלחו ${fmt.format(dispatchableTotal || selection.size)} מוצרים. הבחירה מתעדכנת בזמן אמת.`
-                  : "סמנו מוצרים מהרשימה למטה כדי להתחיל."}
-              </Typography>
-              <Button
-                size="large"
-                variant="contained"
-                color="primary"
-                startIcon={<UploadIcon />}
-                disabled={selection.size === 0 || pushBusy || channel !== "superpharm" || (preview != null && dispatchableTotal === 0)}
-                onClick={() => setPushDialog(true)}
-                sx={{ minHeight: 52, px: 3, fontSize: 16, fontWeight: 800 }}
-              >
-                העלה מוצרים
-              </Button>
+              <Stack direction="row" spacing={1.2} flexWrap="wrap" useFlexGap alignItems="center">
+                <StatChip label="נבחרו" value={selection.size} tone="primary" />
+                <StatChip label="עוברים בדיקה" value={eligible} tone="success" />
+                {blocked > 0 && <StatChip label="חסומים" value={blocked} tone="warning" />}
+                <Chip
+                  label="ערוץ: סופר-פארם"
+                  size="small"
+                  variant="outlined"
+                  sx={{ height: 28, fontWeight: 600 }}
+                />
+              </Stack>
+              <Stack direction={{ xs: "column", sm: "row" }} alignItems="center" spacing={1.5}>
+                {selection.size > 0 ? (
+                  <Typography variant="body2" color="text.secondary" sx={{ textAlign: { xs: "right", sm: "left" } }}>
+                    יישלחו {fmt.format(dispatchableTotal || selection.size)} מוצרים
+                  </Typography>
+                ) : null}
+                <Button
+                  size="large"
+                  variant="contained"
+                  color="primary"
+                  startIcon={<UploadIcon />}
+                  disabled={selection.size === 0 || pushBusy || channel !== "superpharm" || (preview != null && dispatchableTotal === 0)}
+                  onClick={() => setPushDialog(true)}
+                  sx={{ minHeight: 48, px: 3, fontSize: 16, fontWeight: 700, alignSelf: { xs: "stretch", sm: "auto" } }}
+                >
+                  העלה מוצרים
+                </Button>
+              </Stack>
             </Stack>
+
+            {previewLoading ? (
+              <Skeleton variant="rounded" height={64} />
+            ) : selection.size > 0 && validationItems.length > 0 ? (
+              <ValidationChecklist items={validationItems} />
+            ) : null}
           </Stack>
         </CardContent>
       </Card>
 
-      {/* Status check + active jobs */}
+      {/* Status tracking */}
       <Card variant="outlined" sx={{ backgroundImage: "none" }}>
         <CardContent>
-          <SectionHeader
-            title="מעקב סטטוס"
-            subtitle={
-              activeImportId
-                ? `מזהה משלוח: ${activeImportId}`
-                : lastChecked
-                  ? `בדיקה אחרונה: ${lastChecked.toLocaleTimeString("he-IL")}`
-                  : "לא מתבצע מעקב אוטומטי. לחצו 'בדוק סטטוס' אחרי העלאה."
-            }
-            actions={
-              <Button
-                variant="contained"
-                color="secondary"
-                onClick={checkStatus}
-                disabled={pollBusy}
-                startIcon={pollBusy ? <CircularProgress size={14} /> : <RefreshIcon />}
-              >
-                {pollBusy ? "בודק…" : "בדוק סטטוס"}
-              </Button>
-            }
-          />
-          <Box sx={{ mt: 2 }}>
-            <JobStatusTimeline jobs={activeJobs} />
-          </Box>
+          <Stack spacing={2}>
+            <Stack
+              direction={{ xs: "column", md: "row" }}
+              alignItems={{ xs: "stretch", md: "center" }}
+              justifyContent="space-between"
+              spacing={1.5}
+            >
+              <Stack direction="row" spacing={1.2} alignItems="center" flexWrap="wrap" useFlexGap>
+                <Typography variant="h6" component="h2" sx={{ lineHeight: 1.18, m: 0 }}>
+                  מעקב סטטוס
+                </Typography>
+                <Chip
+                  label={overallStatus.label}
+                  size="small"
+                  color={overallStatus.color === "default" ? undefined : overallStatus.color}
+                  variant={overallStatus.color === "default" ? "outlined" : "filled"}
+                  sx={{ fontWeight: 700 }}
+                />
+                {activeImportId && (
+                  <Tooltip title="העתק מזהה משלוח" arrow>
+                    <Chip
+                      label={`#${activeImportId}`}
+                      size="small"
+                      variant="outlined"
+                      onClick={() => void navigator.clipboard?.writeText(String(activeImportId))}
+                      sx={{ direction: "ltr", fontFamily: "monospace", cursor: "pointer" }}
+                    />
+                  </Tooltip>
+                )}
+                {lastChecked && (
+                  <Typography variant="caption" color="text.secondary">
+                    עודכן {formatRelativeHe(lastChecked)}
+                  </Typography>
+                )}
+              </Stack>
+
+              <Stack direction="row" spacing={1} alignItems="center" justifyContent={{ xs: "flex-end", md: "flex-end" }}>
+                {stage2ReadyIds.length > 0 && (
+                  <Button
+                    variant="contained"
+                    color="primary"
+                    onClick={runStage2}
+                    disabled={stage2Busy || readyOffersLoading}
+                    startIcon={stage2Busy || readyOffersLoading ? <CircularProgress size={14} color="inherit" /> : <UploadIcon />}
+                  >
+                    {stage2Busy ? "שולח…" : readyOffersLoading ? "בודק…" : `פרסם ${fmt.format(stage2ReadyIds.length)} הצעות`}
+                  </Button>
+                )}
+                <Tooltip title={pollBusy ? "בודק…" : "בדוק סטטוס עכשיו"} arrow>
+                  <span>
+                    <IconButton onClick={checkStatus} disabled={pollBusy} aria-label="בדוק סטטוס">
+                      {pollBusy ? <CircularProgress size={18} /> : <RefreshIcon />}
+                    </IconButton>
+                  </span>
+                </Tooltip>
+                <Tooltip title={statusOpen ? "הסתר מעקב" : "הצג מעקב"} arrow>
+                  <IconButton
+                    onClick={() => setStatusOpen((v) => !v)}
+                    aria-label={statusOpen ? "הסתר מעקב סטטוס" : "הצג מעקב סטטוס"}
+                    sx={{ transform: statusOpen ? "rotate(180deg)" : "none", transition: "transform 160ms ease" }}
+                  >
+                    <ExpandMoreIcon />
+                  </IconButton>
+                </Tooltip>
+              </Stack>
+            </Stack>
+
+            {stage2Notice && (
+              <Alert severity={stage2Notice.severity}>{stage2Notice.message}</Alert>
+            )}
+
+            <Collapse in={statusOpen} unmountOnExit>
+              {activeJobs.length > 0 ? (
+                <JobStatusTimeline jobs={activeJobs} />
+              ) : (
+                <Typography variant="body2" color="text.secondary" sx={{ textAlign: "center", py: 1.5 }}>
+                  אין משימות פעילות. אחרי העלאה הסטטוס יופיע כאן.
+                </Typography>
+              )}
+            </Collapse>
+          </Stack>
         </CardContent>
       </Card>
 
-      {/* Product list */}
-      <SectionHeader
-        title={`רשימת מוצרים (${fmt.format(filteredRows.length)})`}
-        subtitle={selection.size > 0 ? `${selection.size} נבחרו` : "סמנו את המוצרים שתרצו להעלות"}
-        actions={
-          <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-            <Button size="small" variant="outlined" startIcon={<SelectAllIcon />} onClick={selectAllVisible}>
-              בחר הכל
-            </Button>
-            <Button size="small" variant="text" startIcon={<ClearAllIcon />} onClick={clearSelection} disabled={selection.size === 0}>
-              נקה בחירה
-            </Button>
-          </Stack>
-        }
-      />
-
-      <Stack direction={{ xs: "column", md: "row" }} spacing={1.5} alignItems="center">
-        <TextField
-          size="small"
-          placeholder="חפש לפי שם, מותג או ברקוד…"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          sx={{ flex: 1, minWidth: 240 }}
-        />
-        <TextField
-          select
-          size="small"
-          label="עמוד"
-          value={page}
-          onChange={(e) => setPage(Number(e.target.value))}
-          sx={{ minWidth: 130 }}
-        >
-          {Array.from({ length: totalPages }).map((_, i) => (
-            <MenuItem key={i} value={i}>
-              {i + 1} / {totalPages}
-            </MenuItem>
-          ))}
-        </TextField>
+      {/* Product list toolbar: title + count, search, selection actions on one row */}
+      <Stack
+        direction={{ xs: "column", md: "row" }}
+        spacing={1.5}
+        alignItems={{ xs: "stretch", md: "center" }}
+        justifyContent="space-between"
+        sx={{ mt: 0.5 }}
+      >
+        <Stack spacing={0.2} sx={{ minWidth: 0 }}>
+          <Typography variant="h6" component="h2" sx={{ lineHeight: 1.2, m: 0 }}>
+            רשימת מוצרים
+          </Typography>
+          <Typography variant="caption" color="text.secondary">
+            {fmt.format(filteredRows.length)} תוצאות
+            {selection.size > 0 && ` · ${fmt.format(selection.size)} נבחרו`}
+          </Typography>
+        </Stack>
+        <Stack direction="row" spacing={1} alignItems="center" sx={{ flex: { md: 1 }, justifyContent: { md: "flex-end" } }}>
+          <TextField
+            size="small"
+            placeholder="חיפוש שם, מותג, ברקוד…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position="start">
+                  <SearchIcon fontSize="small" />
+                </InputAdornment>
+              ),
+            }}
+            sx={{ flex: { xs: 1, md: "0 1 320px" }, minWidth: 200 }}
+          />
+          <Tooltip title="בחר הכל המתאימים לפילטר" arrow>
+            <span>
+              <IconButton onClick={selectAllVisible} disabled={filteredRows.length === 0} aria-label="בחר הכל">
+                <SelectAllIcon />
+              </IconButton>
+            </span>
+          </Tooltip>
+          <Tooltip title="נקה בחירה" arrow>
+            <span>
+              <IconButton onClick={clearSelection} disabled={selection.size === 0} aria-label="נקה בחירה">
+                <ClearAllIcon />
+              </IconButton>
+            </span>
+          </Tooltip>
+        </Stack>
       </Stack>
 
       {filteredRows.length === 0 && !isLoadingList && (
-        <Alert severity="info">
+        <Alert severity="info" variant="outlined">
           {filter === "ready"
             ? "אין מוצרים מוכנים להעלאה. בדקו את לוח הקטלוג כדי לסמן מוצרים חסרים."
-            : "אין מוצרים בסטטוס זה."}
+            : filter === "in_progress"
+              ? "אין מוצרים בתהליך כרגע. אחרי לחיצה על 'העלה מוצרים' הם יופיעו כאן."
+              : filter === "done"
+                ? "אין עדיין מוצרים שהועלו או נכשלו."
+                : filter === "last_failed"
+                  ? "אין כשלים מהבאצ' האחרון."
+                  : "אין מוצרים תואמים לחיפוש."}
         </Alert>
       )}
 
-      <Grid container spacing={2}>
-        {isLoadingList && filteredRows.length === 0 &&
-          Array.from({ length: 6 }).map((_, i) => (
-            <Grid item xs={12} md={6} xl={4} key={i}>
-              <Skeleton variant="rounded" height={220} />
-            </Grid>
-          ))}
-        {pagedRows.map((p) => {
-          const checked = selection.has(p.id);
-          const isDone = p.bucket === "done";
-          const status = p.pilot_status ?? "missing";
-          return (
-            <Grid item xs={12} md={6} xl={4} key={p.id}>
-              <Card
-                variant="outlined"
-                onClick={() => !isDone && toggleSelect(p.id)}
-                sx={(theme) => ({
-                  cursor: isDone ? "default" : "pointer",
-                  height: "100%",
-                  display: "flex",
-                  flexDirection: "column",
-                  borderColor: checked ? theme.palette.primary.main : alpha(theme.palette.text.primary, 0.1),
-                  bgcolor: checked ? alpha(theme.palette.primary.main, 0.04) : "transparent",
-                  backgroundImage: "none",
-                  transition: "border-color 160ms ease, background-color 160ms ease, transform 160ms ease",
-                  "&:hover": isDone
-                    ? undefined
-                    : { transform: "translateY(-1px)", borderColor: alpha(theme.palette.primary.main, 0.6) },
-                })}
-              >
-                <Box sx={{ p: 2, display: "flex", gap: 2 }}>
-                  {!isDone && (
-                    <Checkbox
-                      checked={checked}
-                      onChange={() => toggleSelect(p.id)}
-                      onClick={(e) => e.stopPropagation()}
-                      sx={{ alignSelf: "flex-start", p: 0.5 }}
-                    />
-                  )}
-                  <ImageThumb src={p.image} size={92} />
-                  <Box sx={{ flex: 1, minWidth: 0 }}>
-                    <Typography variant="subtitle2" sx={{ fontWeight: 900, lineHeight: 1.2 }}>
-                      {p.name_he ?? "—"}
-                    </Typography>
-                    <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap sx={{ mt: 0.6 }}>
-                      {p.brand && <Chip size="small" label={p.brand} variant="outlined" />}
-                      {p.category && <Chip size="small" label={p.category} />}
-                      <Chip
-                        size="small"
-                        color={STATUS_COLOR[status] ?? "default"}
-                        label={STATUS_LABEL[status] ?? status}
-                      />
-                    </Stack>
-                    {p.ean && (
-                      <Typography variant="caption" sx={{ direction: "ltr", display: "block", mt: 0.6 }}>
-                        EAN: {p.ean}
-                      </Typography>
-                    )}
-                  </Box>
-                </Box>
-                <CardContent sx={{ pt: 0, flex: 1 }}>
-                  <PricingPreview product={{ base_price: p.price, pickup_cost: p.pickup_cost }} variant="strip" />
-                </CardContent>
-                <CardActions sx={{ px: 2, pb: 2, justifyContent: "flex-end", gap: 1 }}>
-                  <Button
-                    size="small"
-                    variant="outlined"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      openReadiness(p.id);
-                    }}
-                  >
-                    בדוק / השלם נתונים
-                  </Button>
-                  <Tooltip title="הסר מתור ההעלאה">
-                    <IconButton
-                      size="small"
-                      color="error"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        removeFromQueue(p.id);
-                      }}
-                    >
-                      <RemoveIcon fontSize="small" />
-                    </IconButton>
-                  </Tooltip>
-                </CardActions>
-              </Card>
-            </Grid>
-          );
-        })}
-      </Grid>
+      <UploadProductsTable
+        rows={pagedRows}
+        loading={isLoadingList && filteredRows.length === 0}
+        selection={selection}
+        onToggle={toggleSelect}
+        onOpenReadiness={openReadiness}
+        onRemove={requestRemoveFromQueue}
+      />
 
       {totalPages > 1 && (
-        <Stack direction="row" justifyContent="center" spacing={1.5} alignItems="center" sx={{ mt: 2 }}>
-          <Button size="small" variant="outlined" disabled={page === 0} onClick={() => setPage((p) => p - 1)}>
-            הקודם
-          </Button>
-          <Typography variant="caption" color="text.secondary">
-            עמוד {page + 1} מתוך {totalPages}
-          </Typography>
-          <Button size="small" variant="outlined" disabled={page >= totalPages - 1} onClick={() => setPage((p) => p + 1)}>
-            הבא
-          </Button>
+        <Stack direction="row" justifyContent="center" sx={{ mt: 1 }}>
+          <Pagination
+            count={totalPages}
+            page={page + 1}
+            onChange={(_, p) => setPage(p - 1)}
+            color="primary"
+            shape="rounded"
+            siblingCount={1}
+            boundaryCount={1}
+          />
         </Stack>
       )}
 
@@ -982,12 +1406,12 @@ export default function BoardUpload() {
             <ul style={{ paddingInlineStart: 18, marginBlock: 0 }}>
               <li>
                 <Typography variant="body2">
-                  <strong>יצירה בקטלוג סופר-פארם (PM01)</strong> — מוצר חדש שלא קיים שם נוצר אוטומטית.
+                  <strong>יצירה בקטלוג סופר-פארם (PM01):</strong> מוצר חדש שלא קיים שם נוצר אוטומטית.
                 </Typography>
               </li>
               <li>
                 <Typography variant="body2">
-                  <strong>פרסום הצעה (OF01)</strong> — מחיר, מלאי, משלוח. רץ אוטומטית אחרי שהמוצר נוצר.
+                  <strong>פרסום הצעה (OF01):</strong> מחיר, מלאי, משלוח. רץ אוטומטית אחרי שהמוצר נוצר.
                 </Typography>
               </li>
             </ul>
@@ -1010,7 +1434,7 @@ export default function BoardUpload() {
             </Typography>
             {needsPm01 > 0 && (
               <Alert severity="info">
-                {fmt.format(needsPm01)} מוצרים ייווצרו תחילה בקטלוג סופר-פארם (PM01), ואז ההצעה תפורסם אוטומטית.
+                {fmt.format(needsPm01)} מוצרים ייווצרו תחילה בקטלוג סופר-פארם, ואז ההצעה תפורסם אוטומטית.
               </Alert>
             )}
             {(preview?.blocked_by_duplicate ?? 0) + (preview?.blocked_by_priceFor ?? 0) > 0 && (
@@ -1036,6 +1460,27 @@ export default function BoardUpload() {
             startIcon={pushBusy ? <CircularProgress size={16} color="inherit" /> : <UploadIcon />}
           >
             {pushBusy ? "שולח…" : `העלה ${fmt.format(dispatchableTotal || selection.size)} מוצרים`}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog
+        open={removeConfirm !== null}
+        onClose={() => setRemoveConfirm(null)}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle>הסר מתור ההעלאה?</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2">
+            המוצר <strong>{removeConfirm?.name}</strong> יסומן כ&quot;להתעלם&quot; ולא יעלה לסופר-פארם.
+            ניתן להחזיר ידנית מהבורד &quot;רשימת מוצרים&quot;.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setRemoveConfirm(null)}>ביטול</Button>
+          <Button onClick={confirmRemoveFromQueue} variant="contained" color="warning">
+            הסר
           </Button>
         </DialogActions>
       </Dialog>

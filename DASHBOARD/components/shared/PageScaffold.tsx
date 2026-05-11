@@ -70,22 +70,12 @@ export function PageHeader({
       sx={(theme) => {
         const main = theme.palette[tone]?.main ?? toneFallback[tone];
         return {
-          position: "relative",
-          overflow: "hidden",
           borderRadius: 2,
           p: { xs: 2, md: 2.6 },
           border: `1px solid ${alpha(main, 0.16)}`,
           backgroundColor: theme.palette.background.paper,
           backgroundImage: "none",
-          boxShadow: `0 1px 2px ${alpha(theme.palette.common.black, 0.04)}, 0 8px 22px ${alpha(theme.palette.common.black, 0.035)}`,
-          "&:before": {
-            content: '""',
-            position: "absolute",
-            insetBlock: 0,
-            insetInlineStart: 0,
-            width: 4,
-            backgroundColor: alpha(main, 0.72),
-          },
+          boxShadow: `0 1px 2px ${alpha(theme.palette.common.black, 0.04)}`,
         };
       }}
     >

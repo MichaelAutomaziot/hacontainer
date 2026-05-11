@@ -25,28 +25,28 @@ export const DEFAULT_CHANNELS: ChannelOption[] = [
     label: "סופר-פארם",
     icon: <SuperPharmIcon fontSize="small" />,
     enabled: true,
-    hint: "ערוץ פעיל — Mirakl OF01 + PM01",
+    hint: "ערוץ פעיל: Mirakl OF01 + PM01",
   },
   {
     key: "zap",
     label: "Zap",
     icon: <ZapIcon fontSize="small" />,
     enabled: false,
-    hint: "ערוץ עתידי — בקרוב",
+    hint: "ערוץ עתידי, בקרוב",
   },
   {
     key: "walla",
     label: "Walla שופס",
     icon: <WallaIcon fontSize="small" />,
     enabled: false,
-    hint: "ערוץ עתידי — בקרוב",
+    hint: "ערוץ עתידי, בקרוב",
   },
   {
     key: "ace",
     label: "ACE",
     icon: <AceIcon fontSize="small" />,
     enabled: false,
-    hint: "ערוץ עתידי — בקרוב",
+    hint: "ערוץ עתידי, בקרוב",
   },
 ];
 
@@ -110,7 +110,7 @@ export function ChannelSelector({ value, onChange, channels = DEFAULT_CHANNELS }
                   {ch.icon}
                 </Box>
                 <Stack spacing={0} alignItems="flex-start">
-                  <Typography variant="body2" sx={{ lineHeight: 1.1, fontWeight: 800 }}>
+                  <Typography variant="body2" sx={{ lineHeight: 1.1, fontWeight: 700 }}>
                     {ch.label}
                   </Typography>
                   {!ch.enabled && (

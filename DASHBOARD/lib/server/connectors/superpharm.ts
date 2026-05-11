@@ -42,7 +42,7 @@ export const superpharmConnector: Connector = {
     // electronics MUST have a real EAN per Peri's rules. The schema layer
     // already enforces this; we surface a soft warning here for clarity.
     if (!p.ean) {
-      warnings.push("Super-Pharm: ברקוד יוקצה אוטומטית (299-...) — לא מומלץ למוצרי חשמל");
+      warnings.push("Super-Pharm: ברקוד יוקצה אוטומטית (299-...). לא מומלץ למוצרי חשמל");
     }
 
     // Brand resolution against Mirakl value-list. If we can't resolve,
@@ -58,7 +58,7 @@ export const superpharmConnector: Connector = {
           );
         }
       } catch (e) {
-        warnings.push(`Super-Pharm: בדיקת מותג נכשלה — ${(e as Error).message}`);
+        warnings.push(`Super-Pharm: בדיקת מותג נכשלה: ${(e as Error).message}`);
       }
     }
 
@@ -70,12 +70,12 @@ export const superpharmConnector: Connector = {
         .eq("sp_category_code", p.sp_category_code)
         .maybeSingle();
       if (error) {
-        warnings.push(`Super-Pharm: בדיקת קטגוריה נכשלה — ${error.message}`);
+        warnings.push(`Super-Pharm: בדיקת קטגוריה נכשלה: ${error.message}`);
       } else if (!data) {
         blockers.push(`Super-Pharm: קוד קטגוריה ${p.sp_category_code} לא נמצא בטבלה`);
       } else if (!data.is_leaf) {
         blockers.push(
-          `Super-Pharm: קוד הקטגוריה ${p.sp_category_code} אינו leaf — בחר קטגוריה תחתית`,
+          `Super-Pharm: קוד הקטגוריה ${p.sp_category_code} אינו leaf. בחר קטגוריה תחתית`,
         );
       }
     }

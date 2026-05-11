@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   Alert,
+  AlertTitle,
   Box,
   Button,
   Chip,
@@ -13,11 +14,13 @@ import {
   DialogContentText,
   DialogTitle,
   IconButton,
+  Paper,
   Stack,
   Tab,
   Tabs,
   Tooltip,
   Typography,
+  alpha,
 } from "@mui/material";
 import {
   AddCircle as AddIcon,
@@ -39,7 +42,8 @@ import {
   ChannelToggleRow,
   SyncJobsHistory,
 } from "@/components/board";
-import { DataPanel, JsonViewer, SectionHeader } from "@/components/shared";
+import { DataPanel, SectionHeader } from "@/components/shared";
+import { CHANNEL_HE, describeRule, type Rule } from "@/components/settings/pricing-rule-labels";
 
 type SettingsTab = "rules" | "operator" | "categories" | "jobs" | "channels";
 
@@ -71,7 +75,7 @@ export default function BoardSettings() {
   return (
     <BoardShell
       eyebrow="הגדרות מתקדמות"
-      title="בקרה טכנית — חוקים, שדות מפעיל, ערוצים, סנכרונים"
+      title="בקרה טכנית · חוקים, שדות מפעיל, ערוצים, סנכרונים"
       description="האזור הזה לא נדרש בתפעול היומיומי. נועד לאדמינים שמכוונים את חוקי התמחור, מיפוי הקטגוריות, ולמעקב אחר משימות סנכרון."
       meta={<Chip label="מתקדם" size="small" color="warning" variant="outlined" />}
     >
@@ -127,7 +131,7 @@ function RulesTab() {
       { resource: "pricing_rules", id: r.id },
       {
         onSuccess: () => {
-          open?.({ type: "success", message: `חוק ${r.rule_type}/${r.channel} נמחק` });
+          open?.({ type: "success", message: `החוק “${describeRule(r).title}” נמחק` });
           setPendingDelete(null);
           refetch();
         },
@@ -136,81 +140,23 @@ function RulesTab() {
     );
   };
 
-  const cols: GridColDef<Rule>[] = [
-    {
-      field: "channel",
-      headerName: "ערוץ",
-      width: 130,
-      renderCell: (p) => <Chip size="small" label={p.value as string} color="primary" variant="outlined" />,
-    },
-    { field: "rule_type", headerName: "סוג חוק", width: 220 },
-    {
-      field: "config",
-      headerName: "תצורה",
-      flex: 1,
-      minWidth: 280,
-      sortable: false,
-      renderCell: (p) => (
-        <Box
-          sx={{
-            direction: "ltr",
-            fontFamily: "monospace",
-            fontSize: 12,
-            overflow: "hidden",
-            whiteSpace: "nowrap",
-            textOverflow: "ellipsis",
-          }}
-        >
-          {JSON.stringify(p.value)}
-        </Box>
-      ),
-    },
-    {
-      field: "active",
-      headerName: "פעיל",
-      width: 90,
-      renderCell: (p) => (p.value ? <Chip size="small" color="success" label="פעיל" /> : <Chip size="small" label="כבוי" />),
-    },
-    {
-      field: "actions",
-      headerName: "פעולות",
-      width: 130,
-      sortable: false,
-      filterable: false,
-      renderCell: (p) => {
-        const r = p.row;
-        return (
-          <Stack direction="row" spacing={0.5}>
-            <Tooltip title="ערוך">
-              <IconButton size="small" color="primary" onClick={() => router.push(`/settings/rules/edit/${r.id}`)}>
-                <EditIcon fontSize="small" />
-              </IconButton>
-            </Tooltip>
-            <Tooltip title="מחק">
-              <IconButton size="small" color="error" onClick={() => setPendingDelete(r)}>
-                <DeleteIcon fontSize="small" />
-              </IconButton>
-            </Tooltip>
-          </Stack>
-        );
-      },
-    },
-  ];
-
   return (
-    <Stack spacing={2}>
+    <Stack spacing={2.5}>
       <Alert severity="info" variant="outlined" icon={<RulesIcon fontSize="small" />}>
-        <Stack spacing={0.6}>
-          <Typography variant="subtitle2">חוקי סופר-פארם הנוכחיים (נעולים)</Typography>
-          <Typography variant="body2">
-            תוספת משלוח: <strong>₪39</strong> · מקדם מחיר רגיל: <strong>1.15</strong> · משך מבצע: <strong>30 ימים</strong> ·
-            התאמת מחיר מתחרים: <strong>כבוי</strong> (עד שנגדיר רצפת רווח).
-          </Typography>
-        </Stack>
+        <AlertTitle sx={{ mb: 0.25 }}>איך התמחור עובד היום</AlertTitle>
+        <Box component="ul" sx={{ m: 0, pr: 2.5, "& li": { mb: 0.25 } }}>
+          <li>כל מוצר שעולה לסופר-פארם מקבל תוספת של <strong>39 ₪</strong> דמי משלוח על המחיר.</li>
+          <li>“המחיר לפני הנחה” מוצג גבוה ב-<strong>15%</strong> מהמחיר שהלקוח משלם בפועל, כדי שתיראה הנחה.</li>
+          <li>המבצע פעיל <strong>30 ימים</strong> מיום ההעלאה.</li>
+          <li>המחיר מותאם אוטומטית למחיר של <strong>המתחרה הזול ביותר</strong> (ועדיין מתווספים 39 ₪ משלוח).</li>
+        </Box>
+        <Typography variant="body2" color="text.secondary" sx={{ mt: 0.75 }}>
+          כל אחד מהחוקים מופיע למטה. כדי לשנות ערך לוחצים “שינוי” ובוחרים את הערך החדש בעברית — בלי קוד.
+        </Typography>
       </Alert>
 
       <SectionHeader
-        title="כל חוקי התמחור"
+        title="חוקי התמחור"
         subtitle={`${rows.length} חוקים`}
         actions={
           <Button variant="contained" color="primary" startIcon={<AddIcon />} onClick={() => router.push("/settings/rules/create")}>
@@ -219,36 +165,75 @@ function RulesTab() {
         }
       />
 
-      <DataPanel>
-        <DataGrid
-          rows={rows}
-          columns={cols}
-          getRowId={(r) => r.id}
-          autoHeight
-          loading={isFetching}
-          sx={{ border: "none" }}
-          hideFooter={rows.length <= 25}
-        />
-      </DataPanel>
-
-      {rows[0] && (
-        <DataPanel sx={{ p: 2 }}>
-          <Typography variant="overline" color="text.secondary">
-            תצורה מפורטת — חוק ראשון
-          </Typography>
-          <Box sx={{ mt: 1 }}>
-            <JsonViewer value={rows[0].config} maxHeight={300} />
-          </Box>
+      {isFetching && rows.length === 0 ? (
+        <Typography variant="body2" color="text.secondary">טוען חוקים…</Typography>
+      ) : rows.length === 0 ? (
+        <DataPanel sx={{ p: 3 }}>
+          <Typography variant="body2" color="text.secondary">אין עדיין חוקי תמחור. לחצו “הוסף חוק”.</Typography>
         </DataPanel>
+      ) : (
+        <Stack spacing={1.25}>
+          {rows.map((r) => {
+            const d = describeRule(r);
+            return (
+              <Paper
+                key={r.id}
+                variant="outlined"
+                sx={(theme) => ({
+                  p: { xs: 1.5, md: 2 },
+                  borderRadius: 1.5,
+                  borderColor: alpha(theme.palette.text.primary, 0.12),
+                  opacity: r.active ? 1 : 0.62,
+                })}
+              >
+                <Stack
+                  direction={{ xs: "column", sm: "row" }}
+                  spacing={1.5}
+                  alignItems={{ sm: "center" }}
+                  justifyContent="space-between"
+                >
+                  <Box sx={{ minWidth: 0 }}>
+                    <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 0.35 }} flexWrap="wrap" useFlexGap>
+                      <Typography sx={{ fontWeight: 700 }}>{d.title}</Typography>
+                      <Chip size="small" label={CHANNEL_HE[r.channel] ?? r.channel} variant="outlined" />
+                      {r.active ? <Chip size="small" color="success" label="פעיל" /> : <Chip size="small" label="כבוי" />}
+                    </Stack>
+                    <Typography variant="body2" color="text.secondary">{d.line}</Typography>
+                  </Box>
+                  <Stack direction="row" spacing={0.5} sx={{ flexShrink: 0 }} alignItems="center">
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      startIcon={<EditIcon fontSize="small" />}
+                      onClick={() => router.push(`/settings/rules/edit/${r.id}`)}
+                    >
+                      שינוי
+                    </Button>
+                    <Tooltip title="מחיקת החוק">
+                      <IconButton size="small" color="error" onClick={() => setPendingDelete(r)}>
+                        <DeleteIcon fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                  </Stack>
+                </Stack>
+              </Paper>
+            );
+          })}
+        </Stack>
       )}
 
       <Dialog open={!!pendingDelete} onClose={() => setPendingDelete(null)}>
         <DialogTitle>מחיקת חוק תמחור</DialogTitle>
         <DialogContent>
           <DialogContentText>
-            האם למחוק את החוק <strong>{pendingDelete?.rule_type}</strong> בערוץ <strong>{pendingDelete?.channel}</strong>?
-            <br />
-            פעולה זו אינה ניתנת לביטול.
+            {pendingDelete ? (
+              <>
+                למחוק את החוק <strong>{describeRule(pendingDelete).title}</strong>{" "}
+                ({CHANNEL_HE[pendingDelete.channel] ?? pendingDelete.channel})?
+                <br />
+                פעולה זו אינה ניתנת לביטול.
+              </>
+            ) : null}
           </DialogContentText>
         </DialogContent>
         <DialogActions>
@@ -261,14 +246,6 @@ function RulesTab() {
     </Stack>
   );
 }
-
-type Rule = {
-  id: string;
-  channel: string;
-  rule_type: string;
-  config: Record<string, unknown>;
-  active: boolean;
-};
 
 /* ---------------------- operator tab ---------------------- */
 
@@ -531,7 +508,7 @@ function JobsTab() {
           </Typography>
           {blogResult && (
             <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>
-              ריצה אחרונה — מלאי: {blogResult.inventory} · התאמות: {blogResult.catalog_matches} · ערוצים:{" "}
+              ריצה אחרונה · מלאי: {blogResult.inventory} · התאמות: {blogResult.catalog_matches} · ערוצים:{" "}
               {blogResult.channel_listings} · תמונות: {blogResult.image_assets}
             </Typography>
           )}
@@ -558,13 +535,13 @@ function JobsTab() {
         <Stack spacing={1}>
           <Typography variant="subtitle2">ניקוי כפילויות מול הצעות סופר-פארם</Typography>
           <Typography variant="body2">
-            המערכת בודקת את כל המוצרים שמסומנים כ&quot;חסרים&quot; מול ההצעות הפעילות בסופר-פארם —
+            המערכת בודקת את כל המוצרים שמסומנים כ&quot;חסרים&quot; מול ההצעות הפעילות בסופר-פארם:
             פעם בברקוד מדויק, ופעם בהתאמה של 100% לשם. מה שנמצא יסומן כ&quot;קיים בסופר-פארם&quot;
             וייעלם מרשימת ההעלאה.
           </Typography>
           {lastResult && (
             <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>
-              ריצה אחרונה — נבדקו: {lastResult.checked} · הצעות SP נטענו: {lastResult.sp_offers_loaded}
+              ריצה אחרונה · נבדקו: {lastResult.checked} · הצעות SP נטענו: {lastResult.sp_offers_loaded}
               {" · "}
               לפי ברקוד: {lastResult.flipped_by_ean} · לפי שם: {lastResult.flipped_by_title} · סה&quot;כ סומנו:{" "}
               {lastResult.flipped_matches} · עודכנו במלאי: {lastResult.flipped_inventory}
@@ -592,7 +569,7 @@ function JobsTab() {
 function ChannelsTab() {
   return (
     <Stack spacing={2}>
-      <SectionHeader title="ערוצים" subtitle="ערוצי הפצה נוספים בקנה — Zap, Walla שופס, ACE" />
+      <SectionHeader title="ערוצים" subtitle="ערוצי הפצה נוספים בקנה: Zap, Walla שופס, ACE" />
       <Stack spacing={1.2}>
         <ChannelToggleRow
           icon={<ChannelsIcon />}
@@ -610,14 +587,14 @@ function ChannelsTab() {
         <ChannelToggleRow
           icon={<WallaIcon />}
           label="Walla שופס"
-          description="ממשק ספק Walla — בפיתוח."
+          description="ממשק ספק Walla, בפיתוח."
           enabled={false}
           comingSoon
         />
         <ChannelToggleRow
           icon={<AceIcon />}
           label="ACE"
-          description="ממשק B2B מול ACE — בפיתוח."
+          description="ממשק B2B מול ACE, בפיתוח."
           enabled={false}
           comingSoon
         />

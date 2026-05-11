@@ -82,7 +82,7 @@ const navGroups: NavGroup[] = [
     accent: "#e04c4a",
     items: [
       { label: t.nav.dashboard, href: "/dashboard", resource: "dashboard", icon: <DashboardIcon />, hint: "מצב סנכרון ומדדים" },
-      { label: t.pilot.nav.syncCenter, href: "/sync", resource: "sync_jobs", icon: <SyncIcon />, hint: "מרכז סנכרון — כפתור העלאה ראשי" },
+      { label: t.pilot.nav.syncCenter, href: "/sync", resource: "sync_jobs", icon: <SyncIcon />, hint: "מרכז סנכרון, כפתור העלאה ראשי" },
       { label: t.pilot.nav.comparison, href: "/comparison", resource: "catalog_matches", icon: <CompareIcon />, hint: "השוואה ובדיקה ידנית" },
       { label: t.pilot.nav.pilotQueue, href: "/pilot", resource: "pilot", icon: <PilotIcon />, hint: "תור העלאה (מפורט)" },
     ],
@@ -452,7 +452,7 @@ const WorkbenchSiderImpl = ({ Title }: RefineThemedLayoutV2SiderProps) => {
                   מקטלוג ועד העלאה
                 </Typography>
               </Box>
-              <Chip label="LIVE" size="small" sx={{ color: "#fff", bgcolor: "#c12026", fontWeight: 900 }} />
+              <Chip label="LIVE" size="small" sx={{ color: "#fff", bgcolor: "#c12026", fontWeight: 700 }} />
             </Stack>
 
             <Stack direction="row" spacing={0.7} useFlexGap flexWrap="wrap" sx={{ mt: 1 }}>
@@ -537,8 +537,7 @@ const WorkbenchSiderImpl = ({ Title }: RefineThemedLayoutV2SiderProps) => {
           width: { md: width },
           display: { xs: "none", md: "block" },
           flexShrink: 0,
-          transition: "width 220ms ease",
-        }}
+                  }}
       />
 
       {/* Using inline `style` (not sx) bypasses stylis-plugin-rtl, so values
@@ -578,8 +577,7 @@ const WorkbenchSiderImpl = ({ Title }: RefineThemedLayoutV2SiderProps) => {
             "& .MuiDrawer-paper": {
               width,
               overflow: "hidden",
-              transition: "width 220ms ease",
-              borderLeft: `1px solid ${alpha("#ffffff", 0.12)}`,
+                            borderLeft: `1px solid ${alpha("#ffffff", 0.12)}`,
             },
           }}
           PaperProps={{ style: { right: 0, left: "auto" } }}

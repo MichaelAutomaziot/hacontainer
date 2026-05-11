@@ -48,16 +48,6 @@ export function NextActionCard({
           border: `1px solid ${alpha(theme.palette[tone].main, 0.22)}`,
           background: alpha(theme.palette[tone].main, 0.045),
           backgroundImage: "none",
-          position: "relative",
-          overflow: "hidden",
-          "&:before": {
-            content: '""',
-            position: "absolute",
-            insetBlock: 0,
-            insetInlineStart: 0,
-            width: 4,
-            background: theme.palette[tone].main,
-          },
         }),
         ...(Array.isArray(sx) ? sx : sx ? [sx] : []),
       ]}

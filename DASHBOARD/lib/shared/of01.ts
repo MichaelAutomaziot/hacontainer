@@ -2,7 +2,7 @@
  * Pure CSV builder for Mirakl OF01 (offer import).
  *
  * Column set is operator-defined; the set below is calibrated to Super-Pharm:
- *   - Standard columns: sku, product-id, product-id-type, price, quantity, state-code,
+ *   - Standard columns: sku, product-id, product-id-type, price, quantity, state,
  *     description, discount-price, discount-start-date, discount-end-date,
  *     leadtime-to-ship, logistic-class, min-shipping-price, min-shipping-zone, min-shipping-type
  *   - SP custom OFFER fields (per AF01): import-type (REQUIRED), warranty-by (optional)
@@ -14,6 +14,7 @@
  */
 import type { ChannelPayload, ImportType } from "./types";
 import { isValidGtin } from "./matching";
+import { cleanDescriptionForSp } from "./text-fixer";
 
 export type LogisticClass = "MPDefault" | "regular_2" | "MPLarge" | "MPTempMonitor" | "MPFreeShipping";
 
@@ -43,7 +44,7 @@ const COLS = [
   "product-id-type",
   "price",
   "quantity",
-  "state-code",
+  "state",
   "description",
   "discount-price",
   "discount-start-date",
@@ -56,6 +57,12 @@ const COLS = [
   "import-type",
   "warranty-by",
 ] as const;
+
+const CSV_SEPARATOR = ";";
+// SP enforces a 2,000-char description cap. We clamp at 1,700 to leave
+// headroom for CSV-escape inflation (each internal `"` becomes `""`,
+// adding one byte per quote).
+const MAX_DESCRIPTION_CHARS = 1700;
 
 const escape = (val: unknown): string => {
   if (val === undefined || val === null || val === "") return "";
@@ -72,7 +79,7 @@ const toRow = (r: OF01Row): string =>
     r.price.toFixed(2),
     r.quantity,
     r.state_code ?? 11,
-    r.description ?? "",
+    cleanDescriptionForSp(r.description, MAX_DESCRIPTION_CHARS),
     r.discount_price?.toFixed(2) ?? "",
     r.discount_start_date ?? "",
     r.discount_end_date ?? "",
@@ -85,10 +92,10 @@ const toRow = (r: OF01Row): string =>
     r.warranty_by ?? "",
   ]
     .map(escape)
-    .join(",");
+    .join(CSV_SEPARATOR);
 
 export const buildOf01Csv = (rows: OF01Row[]): string => {
-  return [COLS.join(","), ...rows.map(toRow)].join("\n") + "\n";
+  return [COLS.map(escape).join(CSV_SEPARATOR), ...rows.map(toRow)].join("\n") + "\n";
 };
 
 /** Choose SP logistic class given the source product's pickup-cost + size hint.

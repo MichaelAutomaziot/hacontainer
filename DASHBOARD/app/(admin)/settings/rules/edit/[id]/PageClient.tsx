@@ -13,8 +13,8 @@ export default function PricingRuleEditPage() {
   return (
     <PageFrame maxWidth={1100}>
       <PageHeader
-        title={`עריכת חוק תמחור — ${t.pilot.nav.pricingRules}`}
-        subtitle="שינוי בערכים יחול על העלאות עתידיות (לא רטרו על channel_listings קיימים)."
+        title={`עריכת חוק תמחור · ${t.pilot.nav.pricingRules}`}
+        subtitle="השינוי יחול על מוצרים שיועלו מכאן והלאה. מוצרים שכבר עלו לסופר-פארם לא ישתנו רטרואקטיבית."
         icon={<RulesIcon />}
         tone="warning"
       />

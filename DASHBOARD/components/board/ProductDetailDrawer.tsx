@@ -100,7 +100,7 @@ export function ProductDetailDrawer({
                 <Typography variant="overline" color="text.secondary" sx={{ display: "block", lineHeight: 1.1 }}>
                   פרטי מוצר
                 </Typography>
-                <Typography variant="h6" sx={{ fontWeight: 900, lineHeight: 1.2, mt: 0.4 }}>
+                <Typography variant="h6" sx={{ fontWeight: 700, lineHeight: 1.2, mt: 0.4 }}>
                   {row.name_he ?? "—"}
                 </Typography>
               </Box>
@@ -161,7 +161,7 @@ export function ProductDetailDrawer({
                     <Typography variant="body2" color="text.secondary">
                       ביטחון
                     </Typography>
-                    <Typography variant="body2" sx={{ direction: "ltr", fontWeight: 800 }}>
+                    <Typography variant="body2" sx={{ direction: "ltr", fontWeight: 700 }}>
                       {(row.confidence * 100).toFixed(0)}%
                     </Typography>
                   </Stack>
@@ -192,7 +192,7 @@ export function ProductDetailDrawer({
                 </Button>
               )}
               {onMarkMissing && (
-                <Tooltip title="סמן כחסר ב-SP — יעבור להעלאה">
+                <Tooltip title="סמן כחסר ב-SP, יעבור להעלאה">
                   <span>
                     <Button
                       variant="outlined"

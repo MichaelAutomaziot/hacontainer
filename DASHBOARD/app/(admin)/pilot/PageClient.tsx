@@ -163,7 +163,7 @@ export default function PilotPage() {
             </Button>
           </span>
         </Tooltip>
-        <Tooltip title={pm01Busy ? "שולח PM01 לסופר-פארם…" : "צור מוצרים חדשים בקטלוג SP (PM01) — שלב חובה לפני העלאת הצעה (OF01)"}>
+        <Tooltip title={pm01Busy ? "שולח PM01 לסופר-פארם…" : "צור מוצרים חדשים בקטלוג SP (PM01). שלב חובה לפני העלאת הצעה (OF01)"}>
           <span>
             <Button
               startIcon={<UploadIcon />}
@@ -224,7 +224,7 @@ export default function PilotPage() {
             </Button>
           </span>
         </Tooltip>
-        <Tooltip title={pushBusy ? "שולח לסופר-פארם…" : "שלח את כל המוצרים שמוכנים: הומר/אושר/מחכה-לקטלוג/קטלוג-סונכרן. אם המוצר טרם בקטלוג SP — ירוץ PM01 קודם, אחרת OF01."}>
+        <Tooltip title={pushBusy ? "שולח לסופר-פארם…" : "שלח את כל המוצרים שמוכנים: הומר/אושר/מחכה-לקטלוג/קטלוג-סונכרן. אם המוצר טרם בקטלוג SP, ירוץ PM01 קודם, אחרת OF01."}>
           <span>
             <Button
               startIcon={<UploadIcon />}

@@ -13,8 +13,8 @@ export default function PricingRuleCreatePage() {
   return (
     <PageFrame maxWidth={1100}>
       <PageHeader
-        title={`הוספת חוק תמחור — ${t.pilot.nav.pricingRules}`}
-        subtitle="חוקים מועברים אוטומטית למנוע priceFor. שינוי משפיע על העלאות הבאות."
+        title={`הוספת חוק תמחור · ${t.pilot.nav.pricingRules}`}
+        subtitle="בוחרים מה החוק עושה, מגדירים ערך אחד בעברית, ושומרים. החוק יחול על מוצרים שיועלו מכאן והלאה."
         icon={<RulesIcon />}
         tone="warning"
       />

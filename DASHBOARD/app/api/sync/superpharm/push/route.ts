@@ -306,7 +306,7 @@ const fetchSpCatalogedEans = async (eans: string[]): Promise<Set<string>> => {
   const CHUNK = 50;
   for (let i = 0; i < eans.length; i += CHUNK) {
     const slice = eans.slice(i, i + CHUNK);
-    const refs = slice.map((e) => `${e}|EAN`).join(",");
+    const refs = slice.map((e) => `EAN|${e}`).join(",");
     const url = `${base}/api/products?product_references=${encodeURIComponent(refs)}`;
     try {
       const res = await fetch(url, {
@@ -457,7 +457,9 @@ export async function POST(req: Request) {
           invRows.map((r) => r.ean?.trim()).filter((e): e is string => !!e)
         );
 
-    // Source 3: completed PM01 sync_jobs touching any of these inv_ids.
+    // Source 3: completed PM01 sync_jobs with explicit success ids.
+    // Older PM01 jobs store all submitted inv_ids, so do not trust inv_ids
+    // alone here; otherwise stage 2 can be sent for products that failed PM01.
     const knownPm01Synced = new Set<number>();
     {
       const { data: pmJobs } = await sb
@@ -466,7 +468,11 @@ export async function POST(req: Request) {
         .eq("type", "superpharm_pm01")
         .eq("status", "completed");
       for (const j of (pmJobs ?? []) as { payload: Record<string, unknown> | null }[]) {
-        const ids = (j.payload?.inv_ids as number[] | undefined) ?? [];
+        const ids =
+          (j.payload?.catalog_synced_inv_ids as number[] | undefined) ??
+          (j.payload?.pm01_success_inv_ids as number[] | undefined) ??
+          (j.payload?.ready_for_offer_inv_ids as number[] | undefined) ??
+          [];
         for (const id of ids) knownPm01Synced.add(id);
       }
     }

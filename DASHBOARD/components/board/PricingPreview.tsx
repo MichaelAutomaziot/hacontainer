@@ -43,7 +43,7 @@ export function PricingPreview({ product, variant = "panel" }: PricingPreviewPro
         <Typography variant="caption" color="text.secondary">
           לפני: {fmtCurr(round2(base))} + איסוף {fmtCurr(round2(pickup))}
         </Typography>
-        <Typography variant="caption" sx={{ fontWeight: 900 }}>
+        <Typography variant="caption" sx={{ fontWeight: 700 }}>
           → אחרי: {fmtCurr(current)} + משלוח {fmtCurr(shipping)} (רגיל {fmtCurr(strike)})
         </Typography>
       </Stack>

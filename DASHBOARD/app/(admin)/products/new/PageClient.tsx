@@ -14,7 +14,7 @@ export default function ProductNewPage() {
     <PageFrame maxWidth={1100}>
       <PageHeader
         title={t.products.formTitle?.new ?? "הזנת מוצר חדש"}
-        subtitle="הזרימה היחידה — מוצר נכנס פעם אחת ומופץ אוטומטית לכל הערוצים המחוברים."
+        subtitle="הזרימה היחידה: מוצר נכנס פעם אחת ומופץ אוטומטית לכל הערוצים המחוברים."
         icon={<ProductIcon />}
         tone="primary"
       />

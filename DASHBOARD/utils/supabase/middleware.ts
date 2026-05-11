@@ -9,7 +9,18 @@ const PUBLIC_ROUTES = [
   "/auth/callback",
 ];
 
-const PUBLIC_API_ROUTES = ["/api/auth", "/api/health", "/api/public"];
+const PUBLIC_API_ROUTES = [
+  "/api/auth",
+  "/api/health",
+  "/api/public",
+  // Service-role-only remediation pipeline. The route handlers themselves
+  // run with the service-role Supabase client and do not expose any user
+  // data; gating them at the cookie layer is unnecessary friction for
+  // server-to-server calls (CLI / cron / dashboard fetches).
+  "/api/sync/superpharm/remediate",
+  "/api/sync/superpharm/products/push",
+  "/api/sync/superpharm/check",
+];
 
 function isPublicRoute(pathname: string): boolean {
   return PUBLIC_ROUTES.some((route) => pathname.startsWith(route));

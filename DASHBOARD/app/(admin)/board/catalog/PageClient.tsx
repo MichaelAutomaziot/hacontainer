@@ -198,10 +198,18 @@ function SimpleProductList() {
     setPage(1);
   }, [deferredSearch]);
 
+  // The summary cards (total / in HaContainer / in Super-Pharm / needs work)
+  // and the row statuses are derived live by the `board_products` RPC, so we
+  // keep this query effectively non-stale: refetch on mount and whenever the
+  // operator comes back to the tab, so a sync running elsewhere is reflected
+  // here without a manual refresh.
   const { data, isError, isFetching, isLoading, error, refetch } = useQuery({
     queryKey: ["board-simple-products", page, deferredSearch],
     queryFn: () => fetchSimpleProducts(page, deferredSearch),
-    staleTime: 30_000,
+    staleTime: 0,
+    refetchOnWindowFocus: true,
+    refetchOnMount: "always",
+    refetchInterval: 60_000,
   });
 
   const rows = data?.rows ?? [];
@@ -216,6 +224,8 @@ function SimpleProductList() {
         width: 64,
         sortable: false,
         filterable: false,
+        align: "center",
+        headerAlign: "center",
         renderCell: (p) => <ImageThumb src={p.row.image} size={42} />,
       },
       {
@@ -223,9 +233,11 @@ function SimpleProductList() {
         headerName: "שם המוצר",
         flex: 1.6,
         minWidth: 240,
+        align: "right",
+        headerAlign: "right",
         renderCell: (p) => (
           <Tooltip title={p.row.name ?? ""}>
-            <Typography variant="body2" sx={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontWeight: 600 }}>
+            <Typography variant="body2" sx={{ width: "100%", textAlign: "right", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontWeight: 600 }}>
               {p.row.name || "מוצר ללא שם"}
             </Typography>
           </Tooltip>
@@ -235,8 +247,10 @@ function SimpleProductList() {
         field: "brand",
         headerName: "מותג",
         width: 130,
+        align: "right",
+        headerAlign: "right",
         renderCell: (p) => (
-          <Typography variant="body2" color="text.secondary" noWrap>
+          <Typography variant="body2" color="text.secondary" noWrap sx={{ width: "100%", textAlign: "right" }}>
             {p.row.brand ?? "—"}
           </Typography>
         ),
@@ -245,8 +259,10 @@ function SimpleProductList() {
         field: "category",
         headerName: "קטגוריה",
         width: 160,
+        align: "right",
+        headerAlign: "right",
         renderCell: (p) => (
-          <Typography variant="body2" color="text.secondary" noWrap>
+          <Typography variant="body2" color="text.secondary" noWrap sx={{ width: "100%", textAlign: "right" }}>
             {p.row.category ?? "—"}
           </Typography>
         ),
@@ -255,13 +271,15 @@ function SimpleProductList() {
         field: "ean",
         headerName: "ברקוד",
         width: 150,
+        align: "right",
+        headerAlign: "right",
         renderCell: (p) =>
           p.row.ean ? (
-            <Typography variant="body2" sx={{ direction: "ltr", fontVariantNumeric: "tabular-nums", color: "text.secondary" }}>
+            <Typography variant="body2" sx={{ width: "100%", textAlign: "right", direction: "ltr", fontVariantNumeric: "tabular-nums", color: "text.secondary" }}>
               {p.row.ean}
             </Typography>
           ) : (
-            <Typography variant="body2" color="text.disabled">—</Typography>
+            <Typography variant="body2" color="text.disabled" sx={{ width: "100%", textAlign: "right" }}>—</Typography>
           ),
       },
       {
@@ -269,6 +287,8 @@ function SimpleProductList() {
         headerName: "הקונטיינר",
         width: 130,
         sortable: false,
+        align: "right",
+        headerAlign: "right",
         renderCell: (p) => <PlatformStatusBadge status={p.row.source_status} />,
       },
       {
@@ -276,6 +296,8 @@ function SimpleProductList() {
         headerName: "סופר-פארם",
         width: 130,
         sortable: false,
+        align: "right",
+        headerAlign: "right",
         renderCell: (p) => <PlatformStatusBadge status={p.row.superpharm_status} />,
       },
       {
@@ -284,19 +306,21 @@ function SimpleProductList() {
         flex: 1.1,
         minWidth: 180,
         sortable: false,
+        align: "right",
+        headerAlign: "right",
         renderCell: (p) =>
           p.row.issues.length > 0 ? (
             <Tooltip title={p.row.issues.join(" · ")}>
               <Typography
                 variant="caption"
                 color={p.row.superpharm_status === "failed" ? "error.main" : "text.secondary"}
-                sx={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                sx={{ width: "100%", textAlign: "right", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
               >
                 {p.row.issues.slice(0, 2).join(" · ")}
               </Typography>
             </Tooltip>
           ) : (
-            <Typography variant="caption" color="text.disabled">—</Typography>
+            <Typography variant="caption" color="text.disabled" sx={{ width: "100%", textAlign: "right" }}>—</Typography>
           ),
       },
     ],
@@ -855,7 +879,7 @@ function ComparisonTab() {
       action === "mark_missing" ? "approved_for_pilot" : action === "mark_exists" ? "exists_in_sp" : "ignored";
     const okToast =
       action === "mark_missing"
-        ? "סומנו כחסרים — מוכנים להעלאה"
+        ? "סומנו כחסרים, מוכנים להעלאה"
         : action === "mark_exists"
           ? "סומנו כקיימים בסופר-פארם"
           : "הוסרו מתור הבדיקה";
@@ -970,7 +994,7 @@ function ComparisonTab() {
               <InfoIcon fontSize="small" />
             </IconButton>
           </Tooltip>
-          <Tooltip title="סמן כחסר — להעלאה">
+          <Tooltip title="סמן כחסר, להעלאה">
             <span>
               <IconButton
                 size="small"

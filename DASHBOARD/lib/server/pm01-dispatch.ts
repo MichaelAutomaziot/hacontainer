@@ -17,11 +17,15 @@
 import { randomUUID } from "node:crypto";
 import {
   buildPM01Csv,
+  ensureDescriptionForSp,
   fetchBrandIndex,
   resolveBrandCode,
   resolveCategoryFromContainerLabel,
+  sanitizeName,
   type PM01Row,
 } from "@/lib/shared";
+import { recoverImage } from "@/lib/server/remediation/image-fixer";
+import { resolveListValue } from "@/lib/server/remediation/value-list-resolver";
 import {
   extractAllForCategory,
   type AttrSpec,
@@ -43,11 +47,12 @@ export interface InvRow {
   category: string | null;
   category_id: string | null;
   images: string[] | null;
+  hacontainer_url: string | null;
   technical_specs: Record<string, unknown> | null;
 }
 
 const INV_COLS =
-  "id, name_he, description_he, ean, sku, brand, category, category_id, images, technical_specs";
+  "id, name_he, description_he, ean, sku, brand, category, category_id, images, hacontainer_url, technical_specs";
 
 /** GS1 mod-10 check digit for an EAN-13 body (12 digits). */
 const gs1Check = (body12: string): number => {
@@ -480,19 +485,81 @@ export const dispatchPm01 = async (
       const extracted = extractAllForCategory(src, missing);
       Object.assign(baseAttrs, extracted);
     }
+    // For list-type required attrs, translate the human label our extractor
+    // produced into the SP option code. Mirakl rejects raw labels with
+    // 2006|"not in the possible values set". Resolver caches the
+    // /api/values_lists response so this is one network hit per dispatch.
+    for (const spec of requiredSpecs) {
+      if (spec.type !== "list" || !spec.list_code) continue;
+      const cur = baseAttrs[spec.code];
+      if (!cur) continue;
+      const code = await resolveListValue(spec.list_code, cur);
+      if (code) baseAttrs[spec.code] = code;
+    }
 
     const sku = `inv:${inv.id}`;
+    const cleanName = sanitizeName(inv.name_he);
+    if (!cleanName) {
+      rejected.push({
+        sku,
+        inv_id: inv.id,
+        errors: ["name_he is empty after sanitisation (Site_Ex1 risk)"],
+      });
+      continue;
+    }
+    // Pre-flight image fixer: any image not already in our processed-images
+    // bucket goes through resize/white-bg/JPEG conversion. SP rejects raw
+    // HaContainer images (often <800x800, transparent, or .png) with
+    // MCM-05104 / invalid_main_image. Doing this preemptively cuts the
+    // post-PM01 self-heal cycle to zero for image-only failures.
+    let finalImageUrl = inv.images![0]!;
+    if (!/processed-images\//.test(finalImageUrl)) {
+      try {
+        const fix = await recoverImage({
+          ean: inv.ean!.trim(),
+          images: inv.images,
+          hacontainer_url: inv.hacontainer_url,
+          name_he: inv.name_he,
+        });
+        if (fix.ok && fix.newUrl) {
+          finalImageUrl = fix.newUrl;
+          await sb
+            .from("inventory")
+            .update({
+              processed_image_url: fix.newUrl,
+              original_image_url: inv.images![0]!,
+              images: [fix.newUrl, ...inv.images!.slice(1).filter((u) => u !== fix.newUrl)],
+              ...(fix.used_placeholder ? { remediation_status: "partial" } : {}),
+            })
+            .eq("id", inv.id);
+        } else {
+          rejected.push({
+            sku,
+            inv_id: inv.id,
+            errors: [`image-fixer: ${fix.error ?? "unknown"} (source: ${finalImageUrl})`],
+          });
+          continue;
+        }
+      } catch (e) {
+        rejected.push({
+          sku,
+          inv_id: inv.id,
+          errors: [`image-fixer threw: ${(e as Error).message}`],
+        });
+        continue;
+      }
+    }
     accepted.push({
       invId: inv.id,
       sku,
       row: {
         shop_sku: sku,
         ean: inv.ean!.trim(),
-        name: inv.name_he!.trim(),
-        description: inv.description_he ?? "",
+        name: cleanName,
+        description: ensureDescriptionForSp(inv.description_he, cleanName, inv.brand),
         brand_code: brandCode,
         category_code: categoryCode,
-        image_url: inv.images![0]!,
+        image_url: finalImageUrl,
         extra_attrs: baseAttrs,
       },
     });

@@ -27,7 +27,7 @@ export const validateImageDimensions = (file: File): Promise<ImageValidationResu
         width: 0,
         height: 0,
         mime,
-        error: "פורמט לא נתמך — JPG / PNG / WEBP בלבד",
+        error: "פורמט לא נתמך: JPG / PNG / WEBP בלבד",
       });
       return;
     }
@@ -57,7 +57,7 @@ export const validateImageDimensions = (file: File): Promise<ImageValidationResu
         width: 0,
         height: 0,
         mime,
-        error: "טעינת התמונה נכשלה — קובץ פגום או לא נתמך",
+        error: "טעינת התמונה נכשלה. קובץ פגום או לא נתמך",
       });
     };
     img.src = url;

@@ -26,21 +26,12 @@ svg:not(:root) {
 }
 
 /* Lock the side drawer to the right edge in this RTL app. Bypasses any
-   stylis-plugin-rtl flips of `right`/`left` on the inline anchor styles. */
-.MuiDrawer-docked .MuiDrawer-paper,
+   stylis-plugin-rtl flips of `right`/`left` on the temporary-drawer anchor
+   styles. The permanent sidebar is a normal sticky flex child (see
+   BoardSider) and needs no override here. */
 .MuiDrawer-modal .MuiDrawer-paper {
   right: 0 !important;
   left: auto !important;
-}
-
-/* Reserve the right gutter for the permanent sidebar at md+ breakpoints.
-   Done in globals.css to bypass stylis-plugin-rtl, which would flip a
-   physical `padding-right` set via emotion sx. */
-@media (min-width: 900px) {
-  .admin-shell-wrapper {
-    padding-right: 260px !important;
-    padding-left: 0 !important;
-  }
 }
 
 html {

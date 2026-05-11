@@ -72,7 +72,7 @@ export function ValidationChecklist({ items, emptyLabel = "אין בעיות ל�
               {kindIcon(item.kind)}
             </Box>
             <Stack spacing={0.3} sx={{ minWidth: 0, flex: 1 }}>
-              <Typography variant="body2" sx={{ fontWeight: 800, lineHeight: 1.3 }}>
+              <Typography variant="body2" sx={{ fontWeight: 700, lineHeight: 1.3 }}>
                 {item.message}
               </Typography>
               {item.hint && (

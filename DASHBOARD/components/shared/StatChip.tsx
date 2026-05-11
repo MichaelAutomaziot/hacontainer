@@ -41,8 +41,8 @@ export function StatChip({ label, value, tone = "neutral", icon, sx, href, onCli
             color: theme.palette.text.primary,
             textDecoration: "none",
             cursor: href || onClick ? "pointer" : "default",
-            transition: "transform 140ms ease, background-color 140ms ease",
-            "&:hover": href || onClick ? { transform: "translateY(-1px)", bgcolor: alpha(main, 0.1) } : undefined,
+            transition: "background-color 140ms ease",
+            "&:hover": href || onClick ? { bgcolor: alpha(main, 0.1) } : undefined,
             "& .stat-label": { color: theme.palette.text.secondary },
             "& .stat-icon": { color: main, display: "grid", placeItems: "center", "& svg": { fontSize: 18 } },
           };
@@ -61,7 +61,7 @@ export function StatChip({ label, value, tone = "neutral", icon, sx, href, onCli
         </Typography>
         <Typography
           variant="subtitle1"
-          sx={{ lineHeight: 1.05, fontWeight: 900, fontVariantNumeric: "tabular-nums" }}
+          sx={{ lineHeight: 1.05, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}
         >
           {formatValue(value)}
         </Typography>

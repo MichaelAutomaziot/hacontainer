@@ -121,30 +121,16 @@ export const KpiCard = ({
 
   if (href) {
     return (
-      <Card
-        sx={(t) => ({
-          height: "100%",
-          position: "relative",
-          overflow: "hidden",
-          "&:before": {
-            content: '""',
-            position: "absolute",
-            insetBlock: 0,
-            insetInlineStart: 0,
-            width: 4,
-            bgcolor: t.palette[color].main,
-          },
-        })}
-      >
+      <Card sx={{ height: "100%" }}>
         <CardActionArea
           component={Link}
           href={href}
           prefetch={false}
-          sx={{
+          sx={(t) => ({
             height: "100%",
             transition: "background-color 160ms ease",
-            "&:hover": { bgcolor: "rgba(37, 99, 235, 0.04)" },
-          }}
+            "&:hover": { bgcolor: alpha(t.palette[color].main, 0.04) },
+          })}
         >
           {inner}
         </CardActionArea>
@@ -152,23 +138,5 @@ export const KpiCard = ({
     );
   }
 
-  return (
-    <Card
-      sx={(t) => ({
-        height: "100%",
-        position: "relative",
-        overflow: "hidden",
-        "&:before": {
-          content: '""',
-          position: "absolute",
-          insetBlock: 0,
-          insetInlineStart: 0,
-          width: 4,
-          bgcolor: t.palette[color].main,
-        },
-      })}
-    >
-      {inner}
-    </Card>
-  );
+  return <Card sx={{ height: "100%" }}>{inner}</Card>;
 };

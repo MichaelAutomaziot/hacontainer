@@ -163,7 +163,7 @@ export default function ComparisonPage() {
       : "ignored";
 
     const okToast =
-      action === "mark_missing" ? "סומנו כחסרים — מוכנים להעלאה"
+      action === "mark_missing" ? "סומנו כחסרים, מוכנים להעלאה"
       : action === "mark_exists" ? "סומנו כקיימים בסופר-פארם"
       : "הוסרו מתור הבדיקה";
 
@@ -301,7 +301,7 @@ export default function ComparisonPage() {
     <PageFrame>
       <PageHeader
         title={t.pilot.nav.comparison}
-        subtitle="HaContainer מול סופר-פארם — אישור ידני: קיים/חסר/דלג."
+        subtitle="HaContainer מול סופר-פארם · אישור ידני: קיים/חסר/דלג."
         icon={<CompareIcon />}
         tone="warning"
         stats={

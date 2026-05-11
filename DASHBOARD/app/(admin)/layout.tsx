@@ -134,30 +134,37 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         }}
       >
         <Suspense fallback={<RouteLoading />}>
+          {/* RTL shell. The desktop sidebar is `position: fixed` pinned to the
+              inline-start (physical right) edge; <main> reserves the matching
+              gutter with `padding-inline-start`. Both use logical properties so
+              stylis-plugin-rtl can't flip them. On mobile the sidebar collapses
+              to a drawer and the gutter goes away. */}
           <Box
             className="admin-shell-wrapper"
             sx={{
-              minHeight: '100vh',
-              direction: 'rtl',
-              bgcolor: '#f6f5f2',
-              backgroundImage: 'none',
+              minHeight: '100dvh',
+              display: 'flex',
+              flexDirection: 'column',
+              bgcolor: 'background.default',
               boxSizing: 'border-box',
               width: '100%',
-              overflowX: 'hidden',
+              // `clip` (not `hidden`) so this never becomes a scroll container —
+              // keeps sticky descendants (mobile top bar, table headers) working.
+              overflowX: 'clip',
+              paddingInlineStart: { md: `${BOARD_SIDEBAR_WIDTH}px` },
             }}
           >
             <BoardSider />
             <Box
               component="main"
               sx={{
+                flex: 1,
                 minWidth: 0,
-                minHeight: '100vh',
-                width: '100%',
-                direction: 'rtl',
-                bgcolor: '#f6f5f2',
-                backgroundImage: 'none',
+                display: 'flex',
+                flexDirection: 'column',
+                bgcolor: 'background.default',
                 boxSizing: 'border-box',
-                overflowX: 'hidden',
+                overflowX: 'clip',
               }}
             >
               {children}

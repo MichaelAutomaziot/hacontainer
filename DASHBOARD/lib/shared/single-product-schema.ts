@@ -22,7 +22,7 @@ export const productImageSchema = z.object({
   width: z.number().int().min(300, "תמונה קטנה מדי (מינימום 300×300)"),
   height: z.number().int().min(300, "תמונה קטנה מדי (מינימום 300×300)"),
   mime: z.enum(["image/jpeg", "image/png", "image/webp"], {
-    errorMap: () => ({ message: "פורמט לא נתמך — JPG / PNG / WEBP בלבד" }),
+    errorMap: () => ({ message: "פורמט לא נתמך: JPG / PNG / WEBP בלבד" }),
   }),
 });
 
@@ -39,7 +39,7 @@ export const productInputSchema = z.object({
   description_he: z
     .string({ required_error: "שדה חובה" })
     .trim()
-    .min(HE_DESC_MIN, `תיאור קצר מדי — לפחות ${HE_DESC_MIN} תווים`)
+    .min(HE_DESC_MIN, `תיאור קצר מדי: לפחות ${HE_DESC_MIN} תווים`)
     .max(HE_DESC_MAX, `תיאור ארוך מדי (מקסימום ${HE_DESC_MAX} תווים)`)
     .refine(
       (v) => !COMMERCIAL_RX.test(v),
@@ -49,7 +49,7 @@ export const productInputSchema = z.object({
     .string()
     .trim()
     .regex(/^\d{8,14}$/u, "ברקוד חייב 8-14 ספרות")
-    .refine(isValidGtin, "ברקוד לא תקין — בדוק ספרת ביקורת GS1")
+    .refine(isValidGtin, "ברקוד לא תקין. בדוק ספרת ביקורת GS1")
     .optional()
     .nullable(),
   sku: z
@@ -152,14 +152,14 @@ export const validateBusinessRules = (input: ProductInput): BusinessRulesResult 
     warnings.push({
       code: "name_commercial_lang",
       field: "name_he",
-      message: "השם נוקה משפה מסחרית — בדוק את הגרסה הנקייה לפני שליחה",
+      message: "השם נוקה משפה מסחרית. בדוק את הגרסה הנקייה לפני שליחה",
     });
   }
   if (cleanedDescription !== input.description_he.trim()) {
     warnings.push({
       code: "description_commercial_lang",
       field: "description_he",
-      message: "התיאור נוקה משפה מסחרית — בדוק את הגרסה הנקייה לפני שליחה",
+      message: "התיאור נוקה משפה מסחרית. בדוק את הגרסה הנקייה לפני שליחה",
     });
   }
 

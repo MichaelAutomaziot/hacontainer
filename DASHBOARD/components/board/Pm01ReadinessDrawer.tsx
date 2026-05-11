@@ -121,10 +121,10 @@ export default function Pm01ReadinessDrawer({
   const setAttr = (code: string, v: string) =>
     setForm((f) => ({ ...f, attrs: { ...f.attrs, [code]: v } }));
 
-  const useExtracted = (a: MissingAttr) => {
+  const applyExtractedValue = (a: MissingAttr) => {
     if (a.extracted) setAttr(a.code, a.extracted);
   };
-  const useDefault = (a: MissingAttr) => {
+  const applyDefaultValue = (a: MissingAttr) => {
     if (a.default) setAttr(a.code, a.default);
   };
 
@@ -195,7 +195,7 @@ export default function Pm01ReadinessDrawer({
     >
       <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
         <Typography variant="h6" sx={{ flex: 1 }}>
-          השלמת נתונים — {validation?.sku ?? `inv:${invId}`}
+          השלמת נתונים · {validation?.sku ?? `inv:${invId}`}
         </Typography>
         <IconButton size="small" onClick={onClose}>
           <CloseIcon fontSize="small" />
@@ -257,7 +257,7 @@ export default function Pm01ReadinessDrawer({
           helperText="חייב להיות שם שמופיע ברשימת המותגים של SP."
         />
         <TextField
-          label="ברקוד EAN (אופציונלי — אם ריק יוצר אוטומטית)"
+          label="ברקוד EAN (אופציונלי, אם ריק יוצר אוטומטית)"
           value={form.ean}
           onChange={(e) => setField("ean", e.target.value)}
           size="small"
@@ -321,7 +321,7 @@ export default function Pm01ReadinessDrawer({
                         size="small"
                         icon={<ExtractedIcon sx={{ fontSize: 14 }} />}
                         label={`חולץ מתיאור: ${a.extracted}`}
-                        onClick={() => useExtracted(a)}
+                        onClick={() => applyExtractedValue(a)}
                         sx={{ cursor: "pointer" }}
                       />
                     )}
@@ -330,7 +330,7 @@ export default function Pm01ReadinessDrawer({
                         size="small"
                         variant="outlined"
                         label={`השתמש ב-default: ${a.default}`}
-                        onClick={() => useDefault(a)}
+                        onClick={() => applyDefaultValue(a)}
                         sx={{ cursor: "pointer" }}
                       />
                     )}

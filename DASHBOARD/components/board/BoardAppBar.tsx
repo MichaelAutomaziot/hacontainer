@@ -152,7 +152,7 @@ export function BoardAppBar() {
           </Box>
           {!isCompact && (
             <Stack spacing={0} sx={{ minWidth: 0 }}>
-              <Typography variant="subtitle2" sx={{ lineHeight: 1.1, fontWeight: 900 }}>
+              <Typography variant="subtitle2" sx={{ lineHeight: 1.1, fontWeight: 700 }}>
                 הקונטיינר
               </Typography>
               <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1, fontSize: "0.7rem" }}>

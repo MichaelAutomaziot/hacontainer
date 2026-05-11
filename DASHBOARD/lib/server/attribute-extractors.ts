@@ -143,6 +143,58 @@ const induction: Extractor = (src) => {
   return "false";
 };
 
+/** 5522 — רוחב (cm). Look for "רוחב: 119 ס מ", "רוחב 80", "Width: 60cm".
+ *  Falls back to "60" — common closet width. */
+const widthCm: Extractor = (src) => {
+  const text = corpus(src);
+  const patterns = [
+    /רוחב[\s:]*?(\d{2,4}(?:\.\d)?)\s*(?:ס[״\"']?\s*מ|cm|״|''|")/i,
+    /width[\s:]*?(\d{2,4}(?:\.\d)?)\s*cm/i,
+    /רוחב[\s:]*?(\d{2,4}(?:\.\d)?)\b/i,
+  ];
+  for (const re of patterns) {
+    const m = text.match(re);
+    if (m) {
+      const n = parseFloat(m[1]);
+      if (n >= 5 && n <= 500) return String(Math.round(n));
+    }
+  }
+  return "60";
+};
+
+/** 6176 — סוג פתיחה (closet door type). SP-confirmed value-list labels
+ *  (10213010cls_Opening Type1..5):
+ *    "פתיחה" (hinged), "הזזה" (sliding), "הזזה (רחף)" (top-hung),
+ *    "הרמוניקה" (folding), "ללא דלתות" (no doors).
+ *  Default falls back to "פתיחה". */
+const openingType: Extractor = (src) => {
+  const text = corpus(src);
+  if (/(?:^|\s)ללא\s*דלתות/u.test(text)) return "ללא דלתות";
+  if (/הרמוניקה|אקורדיון|accordion|folding/i.test(text)) return "הרמוניקה";
+  if (/הזזה.{0,10}רחף|top.?hung/i.test(text)) return "הזזה (רחף)";
+  if (/הזזה|sliding/i.test(text)) return "הזזה";
+  return "פתיחה"; // hinged — Mirakl-confirmed default.
+};
+
+/** 2442 — מספר דלתות. Read from name first ("ארון 4 דלתות"), else description. */
+const doorCount: Extractor = (src) => {
+  const text = `${src.name_he ?? ""}\n${src.description_he ?? ""}`;
+  const patterns = [
+    /(\d{1,2})\s*דלתות?/i,
+    /דלתות?[\s:]*?(\d{1,2})/i,
+    /(\d{1,2})\s*doors?/i,
+  ];
+  for (const re of patterns) {
+    const m = text.match(re);
+    if (m) {
+      const n = parseInt(m[1], 10);
+      if (n >= 1 && n <= 12) return String(n);
+    }
+  }
+  if (/דלת\s+אחת|single\s+door/i.test(text)) return "1";
+  return "2";
+};
+
 const EXTRACTORS: Record<string, Extractor> = {
   "2054": energyRating,
   "2055": energyValidityDate,
@@ -150,7 +202,10 @@ const EXTRACTORS: Record<string, Extractor> = {
   "2062": acManufacturer,
   "2064": acRating,
   "2070": fabricComposition,
+  "2442": doorCount,
+  "5522": widthCm,
   "5589": screenSizeInches,
+  "6176": openingType,
   "6221": induction,
 };
 

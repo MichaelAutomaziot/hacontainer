@@ -1,5 +1,6 @@
 import { alpha, createTheme } from '@mui/material/styles';
-import { heIL } from '@mui/material/locale';
+import { heIL as heILCore } from '@mui/material/locale';
+import { heIL as heILDataGrid } from '@mui/x-data-grid/locales';
 
 declare module '@mui/material/styles' {
   interface Components<Theme = unknown> {
@@ -15,17 +16,16 @@ declare module '@mui/material/styles' {
 
 const RTL_DIRECTION = 'rtl';
 
-// Calm enterprise blue palette — primary `#2563eb` (Tailwind blue-600).
+// Calm enterprise blue palette: primary `#2563eb` (Tailwind blue-600).
 const ink = '#1b2422';
 const muted = '#61706a';
 const paper = '#fbfcf8';
 const paperStrong = '#ffffff';
-const canvas = '#f3f0ee';
+const canvas = '#f6f5f2';
 const border = 'rgba(27, 36, 34, 0.1)';
-// Names kept for backwards compatibility throughout the file; values are now blue.
-const brandRed = '#2563eb';
-const brandRedDark = '#1e40af';
-const brandRedLight = '#60a5fa';
+const brand = '#2563eb';
+const brandDark = '#1e40af';
+const brandLight = '#60a5fa';
 const errorRed = '#dc2626';
 const errorRedDark = '#991b1b';
 const errorRedLight = '#f87171';
@@ -67,9 +67,9 @@ export const theme = createTheme(
     palette: {
       mode: 'light',
       primary: {
-        main: brandRed,
-        light: brandRedLight,
-        dark: brandRedDark,
+        main: brand,
+        light: brandLight,
+        dark: brandDark,
         contrastText: '#ffffff',
       },
       secondary: {
@@ -131,16 +131,19 @@ export const theme = createTheme(
           html: {
             minHeight: '100%',
             backgroundColor: canvas,
-            direction: 'ltr',
-            overflowX: 'hidden',
+            direction: RTL_DIRECTION,
+            // `clip` (not `hidden`) so neither <html> nor <body> turns into a
+            // scroll container — keeps `position: sticky` working for the board
+            // control bars while still killing horizontal page shift.
+            overflowX: 'clip',
           },
           body: {
             minHeight: '100%',
             width: '100%',
             color: ink,
             backgroundColor: canvas,
-            direction: 'ltr',
-            overflowX: 'hidden',
+            direction: RTL_DIRECTION,
+            overflowX: 'clip',
             scrollbarColor: '#b8aaa8 #f3f0ee',
           },
           '*': {
@@ -153,7 +156,7 @@ export const theme = createTheme(
         styleOverrides: {
           root: {
             '&.Mui-focusVisible': {
-              outline: `3px solid ${alpha(brandRed, 0.22)}`,
+              outline: `3px solid ${alpha(brand, 0.22)}`,
               outlineOffset: 2,
             },
           },
@@ -197,9 +200,9 @@ export const theme = createTheme(
           containedPrimary: {
             color: '#ffffff',
             backgroundImage: 'none',
-            backgroundColor: brandRed,
+            backgroundColor: brand,
             '&:hover': {
-              backgroundColor: brandRedDark,
+              backgroundColor: brandDark,
             },
           },
           containedSecondary: {
@@ -215,12 +218,12 @@ export const theme = createTheme(
             backgroundColor: 'transparent',
             color: ink,
             '&:hover': {
-              borderColor: alpha(brandRed, 0.38),
-              backgroundColor: alpha(brandRed, 0.04),
+              borderColor: alpha(brand, 0.38),
+              backgroundColor: alpha(brand, 0.04),
             },
           },
           text: {
-            color: brandRedDark,
+            color: brandDark,
           },
         },
       },
@@ -288,11 +291,10 @@ export const theme = createTheme(
         styleOverrides: {
           root: {
             borderRadius: 8,
-            backgroundColor: alpha(paperStrong, 0.78),
-            transition: 'background-color 160ms ease, box-shadow 160ms ease',
+            backgroundColor: paperStrong,
+            transition: 'box-shadow 160ms ease',
             '&.Mui-focused': {
-              backgroundColor: paperStrong,
-              boxShadow: `0 0 0 3px ${alpha(brandRed, 0.11)}`,
+              boxShadow: `0 0 0 3px ${alpha(brand, 0.11)}`,
             },
           },
           input: {
@@ -308,10 +310,10 @@ export const theme = createTheme(
           },
           root: {
             '&:hover .MuiOutlinedInput-notchedOutline': {
-              borderColor: alpha(brandRed, 0.38),
+              borderColor: alpha(brand, 0.38),
             },
             '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
-              borderColor: brandRed,
+              borderColor: brand,
             },
           },
         },
@@ -346,8 +348,8 @@ export const theme = createTheme(
             color: ink,
             transition: 'background-color 160ms ease, color 160ms ease',
             '&:hover': {
-              backgroundColor: alpha(brandRed, 0.06),
-              color: brandRedDark,
+              backgroundColor: alpha(brand, 0.06),
+              color: brandDark,
             },
           },
           sizeSmall: {
@@ -396,8 +398,8 @@ export const theme = createTheme(
             minHeight: 42,
           },
           indicator: {
-            height: 3,
-            borderRadius: 999,
+            height: 2,
+            borderRadius: 0,
           },
         },
       },
@@ -424,7 +426,7 @@ export const theme = createTheme(
       MuiTableHead: {
         styleOverrides: {
           root: {
-            backgroundColor: alpha(brandRed, 0.05),
+            backgroundColor: alpha(brand, 0.05),
             '& .MuiTableCell-root': {
               fontWeight: 600,
               color: ink,
@@ -438,7 +440,7 @@ export const theme = createTheme(
           root: {
             transition: 'background-color 130ms ease',
             '&:hover': {
-              backgroundColor: `${alpha(brandRed, 0.045)} !important`,
+              backgroundColor: `${alpha(brand, 0.045)} !important`,
             },
           },
         },
@@ -448,59 +450,68 @@ export const theme = createTheme(
         styleOverrides: {
           root: {
             border: 0,
-            backgroundColor: 'transparent',
+            backgroundColor: paperStrong,
             direction: 'rtl',
             color: ink,
             fontVariantNumeric: 'tabular-nums',
-            '--DataGrid-rowBorderColor': alpha(ink, 0.07),
+            '--DataGrid-rowBorderColor': alpha(ink, 0.08),
             '& .MuiDataGrid-main': {
               borderRadius: 8,
             },
             '& .MuiDataGrid-columnHeaders': {
-              backgroundColor: alpha(brandRed, 0.05),
-              borderBottom: `1px solid ${alpha(ink, 0.12)}`,
-              minHeight: '54px !important',
-              fontSize: '1rem',
-              fontWeight: 600,
-              color: ink,
+              backgroundColor: alpha(ink, 0.035),
+              borderBottom: `1px solid ${alpha(ink, 0.14)}`,
+              minHeight: '50px !important',
+              color: muted,
             },
             '& .MuiDataGrid-columnHeader': {
               outline: 'none !important',
+              paddingInline: 16,
             },
             '& .MuiDataGrid-columnHeaderTitle': {
-              fontWeight: 600,
+              fontWeight: 700,
+              fontSize: '0.82rem',
+              letterSpacing: 0,
+              textTransform: 'none',
+            },
+            '& .MuiDataGrid-columnSeparator': {
+              color: alpha(ink, 0.1),
             },
             '& .MuiDataGrid-cell': {
-              fontSize: '1rem',
-              borderBottomColor: alpha(ink, 0.065),
+              fontSize: '0.98rem',
+              paddingInline: 16,
+              borderBottomColor: alpha(ink, 0.07),
               outline: 'none !important',
               alignContent: 'center',
             },
             '& .MuiDataGrid-row': {
-              transition: 'background-color 130ms ease',
-            },
-            '& .MuiDataGrid-row:nth-of-type(even)': {
-              backgroundColor: alpha(paperStrong, 0.3),
+              transition: 'background-color 120ms ease',
             },
             '& .MuiDataGrid-row:hover': {
-              backgroundColor: `${alpha(brandRed, 0.065)} !important`,
+              backgroundColor: `${alpha(brand, 0.045)} !important`,
             },
-            '& .MuiDataGrid-row.Mui-selected': {
-              backgroundColor: `${alpha(brandRed, 0.1)} !important`,
+            '& .MuiDataGrid-row.Mui-selected, & .MuiDataGrid-row.Mui-selected:hover': {
+              backgroundColor: `${alpha(brand, 0.09)} !important`,
+            },
+            '& .MuiDataGrid-row:last-of-type .MuiDataGrid-cell': {
+              borderBottom: 0,
             },
             '& .MuiDataGrid-footerContainer': {
               borderTop: `1px solid ${alpha(ink, 0.1)}`,
-              backgroundColor: alpha(paperStrong, 0.55),
+              backgroundColor: alpha(ink, 0.02),
               minHeight: 48,
             },
             '& .MuiDataGrid-toolbarContainer': {
               gap: 8,
-              padding: '10px 12px',
+              padding: '10px 14px',
               borderBottom: `1px solid ${alpha(ink, 0.08)}`,
-              backgroundColor: alpha(paperStrong, 0.72),
+              backgroundColor: alpha(ink, 0.02),
             },
             '& .MuiDataGrid-virtualScroller': {
-              backgroundColor: alpha(paperStrong, 0.48),
+              backgroundColor: paperStrong,
+            },
+            '& .MuiDataGrid-overlay': {
+              backgroundColor: alpha(paperStrong, 0.6),
             },
             '& .MuiCheckbox-root': {
               padding: 6,
@@ -589,11 +600,11 @@ export const theme = createTheme(
             minHeight: 42,
             color: ink,
             '&.Mui-selected': {
-              backgroundColor: alpha(brandRed, 0.08),
-              color: brandRedDark,
-              boxShadow: `inset -3px 0 0 ${brandRed}`,
+              backgroundColor: alpha(brand, 0.08),
+              color: brandDark,
+              fontWeight: 700,
               '&:hover': {
-                backgroundColor: alpha(brandRed, 0.12),
+                backgroundColor: alpha(brand, 0.12),
               },
             },
             '&:hover': {
@@ -624,5 +635,6 @@ export const theme = createTheme(
       },
     },
   },
-  heIL
+  heILCore,
+  heILDataGrid,
 );

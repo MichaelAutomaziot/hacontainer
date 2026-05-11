@@ -352,7 +352,7 @@ export function SingleProductUploadDialog({
             <Alert severity={submitResult.ok ? "success" : "error"} icon={submitResult.ok ? <DoneIcon /> : <ErrorIcon />}>
               {submitResult.ok
                 ? `המוצר נוצר בהצלחה (inventoryId ${submitResult.inventoryId})`
-                : "ההעלאה נכשלה — בדוק את הסטטוס לכל פלטפורמה למטה"}
+                : "ההעלאה נכשלה. בדוק את הסטטוס לכל פלטפורמה למטה"}
             </Alert>
             <Stack spacing={1}>
               {submitResult.perConnector?.map((c) => (
@@ -500,26 +500,35 @@ export function SingleProductUploadDialog({
                   <Typography sx={{ fontWeight: 600 }}>תמחור</Typography>
                 </AccordionSummary>
                 <AccordionDetails>
-                  <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
-                    <TextField
-                      label="מחיר (₪)"
-                      type="number"
-                      fullWidth
-                      required
-                      inputProps={{ step: "0.01", min: 0 }}
-                      {...register("price", { valueAsNumber: true })}
-                      error={!!errors.price}
-                      helperText={errors.price?.message ?? " "}
-                    />
-                    <TextField
-                      label="עלות איסוף (₪)"
-                      type="number"
-                      fullWidth
-                      inputProps={{ step: "0.01", min: 0 }}
-                      {...register("pickup_cost", { valueAsNumber: true })}
-                      error={!!errors.pickup_cost}
-                      helperText={errors.pickup_cost?.message ?? " "}
-                    />
+                  <Stack spacing={2}>
+                    <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
+                      <TextField
+                        label="מחיר מכירה (₪)"
+                        type="number"
+                        fullWidth
+                        required
+                        inputProps={{ step: "0.01", min: 0 }}
+                        {...register("price", { valueAsNumber: true })}
+                        error={!!errors.price}
+                        helperText={errors.price?.message ?? "המחיר ללקוח, כפי שמופיע באתר הקונטיינר"}
+                      />
+                      <TextField
+                        label="עלות איסוף מהקונטיינר (₪)"
+                        type="number"
+                        fullWidth
+                        inputProps={{ step: "0.01", min: 0 }}
+                        {...register("pickup_cost", { valueAsNumber: true })}
+                        error={!!errors.pickup_cost}
+                        helperText={
+                          errors.pickup_cost?.message ??
+                          "כמה הקונטיינר גובה על איסוף מהמחסן שלו. לא דמי המשלוח שסופר-פארם גובה מהלקוח (אלה תמיד 39 ₪)."
+                        }
+                      />
+                    </Stack>
+                    <Alert severity="info" variant="outlined" sx={{ py: 0.5 }}>
+                      &quot;עלות איסוף&quot; מתייחסת לקונטיינר בלבד — זו העלות הפנימית של איסוף הסחורה,
+                      ולא משפיעה על המחיר או דמי המשלוח בסופר-פארם.
+                    </Alert>
                   </Stack>
                 </AccordionDetails>
               </Accordion>
@@ -610,12 +619,16 @@ export function SingleProductUploadDialog({
                 </AccordionSummary>
                 <AccordionDetails>
                   <Stack spacing={2}>
+                    <Alert severity="info" variant="outlined" sx={{ py: 0.5 }}>
+                      הברקוד חייב להיות <strong>ברקוד בינלאומי תקני</strong> (EAN / GTIN) — כמו זה
+                      שמודפס על אריזת היצרן. לא מק&quot;ט פנימי של הקונטיינר ולא קוד של הספק.
+                    </Alert>
                     <TextField
-                      label={`ברקוד / EAN${isElectronics ? " (חובה למוצרי חשמל)" : " (אופציונלי)"}`}
+                      label={`ברקוד בינלאומי · EAN/GTIN${isElectronics ? " (חובה למוצרי חשמל)" : " (אופציונלי)"}`}
                       fullWidth
                       {...register("ean", { setValueAs: (v) => (v === "" ? null : v) })}
                       error={!!errors.ean}
-                      helperText={errors.ean?.message ?? "8-14 ספרות, GS1 mod-10"}
+                      helperText={errors.ean?.message ?? "8 עד 14 ספרות, ברקוד בינלאומי תקני (GS1)"}
                       InputProps={{ sx: { direction: "ltr", fontVariantNumeric: "tabular-nums" } }}
                     />
                     <TextField

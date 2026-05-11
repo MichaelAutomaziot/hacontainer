@@ -114,7 +114,7 @@ const Channel = ({
           <StateDot state={state} />
         </Box>
         {showLabel && (
-          <Typography variant="caption" sx={{ fontWeight: 800, lineHeight: 1.1 }}>
+          <Typography variant="caption" sx={{ fontWeight: 700, lineHeight: 1.1 }}>
             {label}
           </Typography>
         )}

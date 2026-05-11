@@ -121,6 +121,7 @@ export const fetchBrandIndex = async (
   };
   const list = json.values_lists.find((v) => v.code === "brand-brand-values");
   for (const v of list?.values ?? []) {
+    if (!v?.label || !v.code) continue;
     out.set(v.label.trim().toUpperCase(), v.code);
   }
   return out;

@@ -74,12 +74,14 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   const configScript = `window.__SUPABASE_CONFIG__ = {url: ${sanitizeForScript(url)}, anonKey: ${sanitizeForScript(anon)}};`;
 
   return (
-    <html lang="he" dir="ltr">
+    <html lang="he" dir="rtl">
       <head>
         <link rel="icon" type="image/x-icon" href="/favicon.ico" />
         <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
         <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png" />
         <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link
           rel="stylesheet"
           href="https://fonts.googleapis.com/css2?family=Assistant:wght@400;500;600;700;800&family=Rubik:wght@500;600;700&display=swap"
@@ -91,7 +93,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
           dangerouslySetInnerHTML={{ __html: configScript }}
         />
       </head>
-      <body dir="ltr">
+      <body>
         <Providers>{children}</Providers>
       </body>
     </html>

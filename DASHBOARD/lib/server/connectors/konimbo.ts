@@ -150,7 +150,7 @@ export const konimboConnector: Connector = {
             status: "failed",
             error: {
               code: "konimbo_no_id_in_response",
-              message: "Konimbo החזיר תשובה ללא product id — בדוק את שדה ה-response",
+              message: "Konimbo החזיר תשובה ללא product id. בדוק את שדה ה-response",
             },
           };
         }

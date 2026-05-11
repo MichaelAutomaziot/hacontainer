@@ -43,6 +43,7 @@ import {
   SectionPanel,
   SyncTriggerButton,
 } from "@/components/shared";
+import { AutoRemediationPanel } from "@/components/board/AutoRemediationPanel";
 import { hebrewTranslations as t } from "@/locales/he";
 
 const fmtNum = new Intl.NumberFormat("he-IL");
@@ -110,7 +111,7 @@ const StepHeader = ({
         placeItems: "center",
         bgcolor: done ? th.palette.success.main : th.palette.primary.main,
         color: "#fff",
-        fontWeight: 800,
+        fontWeight: 700,
         fontSize: 16,
         flex: "0 0 auto",
       })}
@@ -260,9 +261,9 @@ export default function SyncPage() {
       renderCell: (p) => {
         const v = p.value as string;
         const map: Record<string, string> = {
-          "sync-konimbo-orphans": "ניקוי יתומים — HaContainer",
-          "sync-superpharm-full": "משיכה מלאה — סופר-פארם",
-          "sync-superpharm-orphans": "ניקוי יתומים — סופר-פארם",
+          "sync-konimbo-orphans": "ניקוי יתומים · HaContainer",
+          "sync-superpharm-full": "משיכה מלאה · סופר-פארם",
+          "sync-superpharm-orphans": "ניקוי יתומים · סופר-פארם",
           "match-catalog": "השוואת קטלוגים",
           "superpharm_of01": "העלאה ל-Mirakl OF01",
         };
@@ -558,7 +559,7 @@ export default function SyncPage() {
               </Typography>
               <Stack direction="row" spacing={1} sx={{ mt: 1 }} flexWrap="wrap" useFlexGap>
                 {blockedDup > 0 && (
-                  <Tooltip title="EAN שלהם כבר קיים בסופר-פארם — לא נעלה כדי לא ליצור כפילות">
+                  <Tooltip title="EAN שלהם כבר קיים בסופר-פארם, לא נעלה כדי לא ליצור כפילות">
                     <Chip
                       size="small"
                       icon={<WarnIcon fontSize="small" />}
@@ -615,6 +616,9 @@ export default function SyncPage() {
           </Grid>
         </Grid>
       </Paper>
+
+      {/* Auto-remediation: SP merchandiser rejections → fix + re-push. */}
+      <AutoRemediationPanel />
 
       {/* History */}
       <SectionPanel title={t.pilot.syncCenter.historyTitle}>

@@ -34,7 +34,7 @@ export default function PilotReportPage() {
 
       <Paper sx={{ p: 4, maxWidth: 900, mx: "auto" }}>
         <Stack alignItems="center" spacing={1} sx={{ mb: 3 }}>
-          <Typography variant="h5" sx={{ fontWeight: 700 }}>דו"ח חתימה — פיילוט סופר-פארם</Typography>
+          <Typography variant="h5" sx={{ fontWeight: 700 }}>דו"ח חתימה · פיילוט סופר-פארם</Typography>
           <Typography color="text.secondary">{new Date().toLocaleDateString("he-IL", { dateStyle: "full" })}</Typography>
         </Stack>
 

@@ -75,7 +75,7 @@ const SYNC_LABELS: Record<string, string> = {
   "sync-konimbo-orphans": "הקונטיינר",
   "sync-konimbo-full": "הקונטיינר",
   "sync-superpharm-full": "סופר-פארם",
-  "sync-superpharm-orphans": "סופר-פארם — ניקוי",
+  "sync-superpharm-orphans": "סופר-פארם · ניקוי",
   "rerun-matching": "השוואת קטלוגים",
   "match-catalog": "השוואת קטלוגים",
   superpharm_pm01: "יצירה בקטלוג (PM01)",
@@ -117,8 +117,13 @@ export default function BoardDashboard() {
   const existsCount = verdicts.duplicate ?? 0;
   const totalVerdicts = Object.values(verdicts).reduce((sum, n) => sum + n, 0);
   const matchedCount = Math.max(totalVerdicts - missingCount, 0);
-  const ready = pilotStatus.approved_for_pilot ?? 0;
-  const uploaded = pilotStatus.uploaded ?? 0;
+  const ready = (pilotStatus.approved_for_pilot ?? 0) + (pilotStatus.catalog_synced ?? 0);
+  const uploaded =
+    (pilotStatus.uploaded ?? 0) +
+    (pilotStatus.uploading ?? 0) +
+    (pilotStatus.offer_submitted ?? 0) +
+    (pilotStatus.offer_approved ?? 0) +
+    (pilotStatus.complete ?? 0);
   const failed = pilotStatus.rejected ?? 0;
 
   const coveragePct = inventoryTotal > 0 ? Math.round((matchedCount / inventoryTotal) * 100) : 0;
@@ -166,7 +171,7 @@ export default function BoardDashboard() {
             tone="success"
             count={missingCount}
             countSuffix="פעולה מומלצת"
-            title="מוצרים חסרים בסופר-פארם — מוכנים להעלאה"
+            title="מוצרים חסרים בסופר-פארם, מוכנים להעלאה"
             description="עברו לבורד 'העלאת מוצרים', בחרו מהרשימה ולחצו 'העלה'. הכל אוטומטי."
             ctaLabel="עבור להעלאה"
             href="/board/upload"
@@ -336,7 +341,7 @@ export default function BoardDashboard() {
                 <Typography variant="overline" color="text.secondary" sx={{ display: "block", lineHeight: 1.1 }}>
                   {SYNC_LABELS[type] ?? type}
                 </Typography>
-                <Typography variant="body2" sx={{ fontWeight: 800 }}>
+                <Typography variant="body2" sx={{ fontWeight: 700 }}>
                   {fmtTs(ts)}
                 </Typography>
               </Box>
